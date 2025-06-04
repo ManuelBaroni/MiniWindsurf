@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Windsurf Adventure Deluxe</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #000033; }
+        canvas { border: 1px solid #555; }
+        #controlsInfo {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            background-color: rgba(0,0,0,0.5);
+            padding: 5px;
+            border-radius: 3px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="controlsInfo"></div>
+    <script>
+        // --- CONFIGURAZIONI ---
+        const WORLD_WIDTH = 12000; // Mondo più grande
+        const WORLD_HEIGHT = 9000; // Mondo più grande
+        const NUM_OCEAN_PARTICLES = 400; // Un po' di più per la densità
+        const SHOW_DEBUG_INFO = false;
+        let SHOW_SAIL_HINT = false; // Per l'indicatore della vela ottimale
+
+        // --- VARIABILI GLOBALI ---
+        let windsurf;
+        let wind;
+        let oceanParticles = [];
+        let islands = [];
+        let camera;
+        let P5_TWO_PI;
+
+        let touchState = {
+            steer: { active: false, startX: 0, id: -1 },
+            sail: { active: false, startY: 0, id: -1 }
+        };
+
+        // --- CLASSE CAMERA ---
+        class Camera {
+            constructor(x, y, followStrength = 0.08) {
+                this.pos = createVector(x, y);
+                this.target = null;
+                this.followStrength = followStrength;
+            }
+            follow(target) { this.target = target; }
+            update() {
+                if (this.target) {
+                    let targetX = this.target.pos.x - width / 2;
+                    let targetY = this.target.pos.y - height / 2;
+                    this.pos.x += (targetX - this.pos.x) * this.followStrength * (deltaTime / 16.66);
+                    this.pos.y += (targetY - this.pos.y) * this.followStrength * (deltaTime / 16.66);
+                    this.pos.x = constrain(this.pos.x, 0, WORLD_WIDTH - width);
+                    this.pos.y = constrain(this.pos.y, 0, WORLD_HEIGHT - height);
+                }
+            }
+            apply() { translate(-this.pos.x, -this.pos.y); }
+        }
+
+        // --- CLASSE WINDSURF ---
+        class Windsurf {
+            constructor(x, y) {
+                this.pos = createVector(x, y);
+                this.vel = createVector(0, 0);
+                this.angle = -P5_TWO_PI / 4;
+                this.sailAngle = 0; // Angolo della vela RELATIVO alla tavola
+
+                this.boardWidth = 22;
+                this.boardLength = 80;
+                this.sailBoomLength = 55;
+                this.sailMastHeight = 70;
+                this.mastOffset = -this.boardLength * 0.15;
+
+                this.maxSpeed = 7;
+                this.turnRate = 0.04;
+                this.sailAdjustRate = 0.05;
+                this.friction = 0.02;
+                this.lateralResistance = 0.92;
+                this.accelerationFactor = 0.08;
+                this.isColliding = false;
+
+                // Limiti per l'angolo della vela
+                this.minSailAngle = -P5_TWO_PI / 3.7; // ~ -PI/1.85
+                this.maxSailAngle = P5_TWO_PI / 3.7;  // ~  PI/1.85
+            }
+
+            handleInput() {
+                if (keyIsDown(LEFT_ARROW)) this.turn(-1);
+                if (keyIsDown(RIGHT_ARROW)) this.turn(1);
+                if (keyIsDown(65)) this.adjustSail(-1); // 'A'
+                if (keyIsDown(68)) this.adjustSail(1); // 'D'
+            }
+
+            turn(direction) { this.angle += this.turnRate * direction * (deltaTime / 16.66); }
+            adjustSail(direction) { this.sailAngle += this.sailAdjustRate * direction * (deltaTime / 16.66); }
+
+            // Funzione per calcolare la propulsione per un dato angolo di vela
+            calculatePropulsion(boardAngle, relativeSailAngle, currentWindAngle, currentWindStrength) {
+                let sailGlobalAngle = boardAngle + relativeSailAngle;
+                let windToSailNormalAngle = smallestAngleBetween(currentWindAngle, sailGlobalAngle + P5_TWO_PI / 4);
+                let forceMagnitudeOnSail = currentWindStrength * cos(windToSailNormalAngle);
+                
+                // La direzione della forza è perpendicolare alla vela
+                let forceDir = sailGlobalAngle + P5_TWO_PI / 4;
+                
+                // Proiezione sulla direzione della tavola
+                // Angolo tra la forza della vela e la direzione della tavola
+                let angleForceToBoard = smallestAngleBetween(forceDir, boardAngle);
+                let propulsion = forceMagnitudeOnSail * cos(angleForceToBoard);
+                return propulsion;
+            }
+
+            update() {
+                this.sailAngle = constrain(this.sailAngle, this.minSailAngle, this.maxSailAngle);
+
+                let propulsion = this.calculatePropulsion(this.angle, this.sailAngle, wind.angle, wind.strength);
+                let boardDirection = p5.Vector.fromAngle(this.angle);
+                let acceleration = boardDirection.copy().mult(propulsion * this.accelerationFactor);
+                this.vel.add(acceleration);
+
+                let frictionForce = this.vel.copy().mult(-this.friction);
+                this.vel.add(frictionForce);
+
+                let perpendicularToBoard = p5.Vector.fromAngle(this.angle + P5_TWO_PI / 4);
+                let lateralVelocityComponent = p5.Vector.dot(this.vel, perpendicularToBoard);
+                let lateralDragForce = perpendicularToBoard.copy().mult(-lateralVelocityComponent * this.lateralResistance);
+                this.vel.add(lateralDragForce);
+
+                if (this.vel.mag() > this.maxSpeed) this.vel.setMag(this.maxSpeed);
+                
+                let effectiveDeltaTime = deltaTime / 16.66; // Normalizza per 60fps target
+                if (!this.isColliding) {
+                    this.pos.add(p5.Vector.mult(this.vel, effectiveDeltaTime));
+                } else {
+                    this.vel.mult(0.3);
+                }
+                this.isColliding = false;
+
+                if (this.pos.x < this.boardLength / 2) { this.pos.x = this.boardLength / 2; this.vel.x *= -0.3; }
+                if (this.pos.x > WORLD_WIDTH - this.boardLength / 2) { this.pos.x = WORLD_WIDTH - this.boardLength / 2; this.vel.x *= -0.3; }
+                if (this.pos.y < this.boardLength / 2) { this.pos.y = this.boardLength / 2; this.vel.y *= -0.3; }
+                if (this.pos.y > WORLD_HEIGHT - this.boardLength / 2) { this.pos.y = WORLD_HEIGHT - this.boardLength / 2; this.vel.y *= -0.3; }
+            }
+
+            checkCollision(island) { // Identica a prima
+                for (const polygon of island.polygons) {
+                    if (collidePointPoly(this.pos.x, this.pos.y, polygon)) {
+                        this.isColliding = true;
+                        let pushForce = createVector(0,0); let minDist = Infinity;
+                        for (let i = 0; i < polygon.length; i++) {
+                            let p1 = polygon[i]; let p2 = polygon[(i + 1) % polygon.length];
+                            let closestPt = getClosestPointOnSegment(this.pos, p1, p2);
+                            let distToSegment = p5.Vector.dist(this.pos, closestPt);
+                            if (distToSegment < minDist) {
+                                minDist = distToSegment;
+                                let segmentVec = p5.Vector.sub(p2, p1);
+                                let normal = createVector(-segmentVec.y, segmentVec.x).normalize();
+                                if (p5.Vector.dot(normal, p5.Vector.sub(this.pos, closestPt)) < 0) normal.mult(-1);
+                                pushForce = normal;
+                            }
+                        }
+                        if (minDist < this.boardWidth / 1.5) {
+                             this.pos.add(pushForce.mult((this.boardWidth / 1.5 - minDist) * 1.2));
+                             this.vel.mult(0.1);
+                        }
+                        return true;
+                    }
+                }
+                return false;
+            }
+            draw() { /* ... identico a prima ... */ 
+                push();
+                translate(this.pos.x, this.pos.y);
+                rotate(this.angle);
+
+                let speed = this.vel.mag();
+                if (speed > 0.3) {
+                    stroke(255, 255, 255, map(speed, 0.3, this.maxSpeed, 20, 120));
+                    let wakeWidth = map(speed, 0.3, this.maxSpeed, 1, this.boardWidth * 0.7);
+                    let wakeLength = map(speed, 0.3, this.maxSpeed, 15, 90);
+                    strokeWeight(wakeWidth * 0.5);
+                    line(0, this.boardWidth * 0.25, -wakeLength, this.boardWidth * 0.35);
+                    line(0, -this.boardWidth * 0.25, -wakeLength, -this.boardWidth * 0.35);
+                    strokeWeight(wakeWidth);
+                    line(0, 0, -wakeLength * 0.7, 0);
+                }
+                
+                fill(200, 170, 110); stroke(80, 60, 40); strokeWeight(1.5);
+                beginShape();
+                vertex(-this.boardLength / 2, 0); 
+                bezierVertex(-this.boardLength / 2 * 0.9, -this.boardWidth / 2 * 0.8, -this.boardLength / 3, -this.boardWidth / 2, 0, -this.boardWidth / 2);
+                vertex(this.boardLength / 2 * 0.6, -this.boardWidth / 2 * 0.7); 
+                bezierVertex(this.boardLength / 2 * 0.85, -this.boardWidth / 2 * 0.3, this.boardLength / 2, -this.boardWidth * 0.1, this.boardLength / 2, 0);
+                bezierVertex(this.boardLength / 2, this.boardWidth * 0.1, this.boardLength / 2 * 0.85, this.boardWidth / 2 * 0.3, this.boardLength / 2 * 0.6, this.boardWidth / 2 * 0.7);
+                vertex(0, this.boardWidth / 2);
+                bezierVertex(-this.boardLength / 3, this.boardWidth / 2, -this.boardLength / 2 * 0.9, this.boardWidth / 2 * 0.8, -this.boardLength / 2, 0);
+                endShape(CLOSE);
+                fill(180,150,100, 150); noStroke();
+                ellipse(-this.boardLength*0.35, 0, 10, this.boardWidth*0.6);
+                fill(60,60,60);
+                rect(this.mastOffset - 8, -3, 16, 6, 2);
+
+                translate(this.mastOffset, 0);
+                fill(50, 50, 60); ellipse(0, 0, 10, 10);
+
+                rotate(this.sailAngle);
+                stroke(70, 70, 80); strokeWeight(5); noFill();
+                beginShape();
+                vertex(0,0);
+                quadraticVertex(this.sailBoomLength * 0.6, this.sailBoomLength * 0.15 * Math.sign(this.sailAngle || 1), this.sailBoomLength, 0);
+                endShape();
+                fill(235, 235, 250, 180 + sin(frameCount * 0.05 + this.pos.x * 0.005 + this.pos.y * 0.003) * 25); // Aggiunto this.pos.y per più variazione
+                stroke(50, 50, 70); strokeWeight(1.5);
+                beginShape();
+                vertex(0, -this.sailMastHeight * 0.02);
+                quadraticVertex(this.sailBoomLength * 0.2, -this.sailMastHeight * 0.8,
+                                this.sailBoomLength * 0.05, -this.sailMastHeight);
+                quadraticVertex(this.sailBoomLength * 0.7, -this.sailMastHeight * 0.3,
+                                this.sailBoomLength, 0);
+                quadraticVertex(this.sailBoomLength * 0.4, this.sailBoomLength * 0.05 * Math.sign(this.sailAngle || 1),
+                                0, this.sailMastHeight * 0.02);
+                endShape(CLOSE);
+                pop();
+            }
+            getSpeed() { return this.vel.mag(); }
+        }
+
+        // --- CLASSE ISOLA ---
+        class Island {
+            constructor(x, y, size, seed) {
+                this.pos = createVector(x, y);
+                this.size = size; // Dimensione media
+                this.seed = seed || random(10000);
+                this.polygons = [];
+                this.color = color(random(100,140), random(150,190), random(60,100)); // Toni più scuri/verdi
+                this.beachColor = color(random(210,240), random(190,220), random(150,180));
+                this.generateShape();
+            }
+
+            generateShape() { // Identica a prima
+                let islandVerts = [];
+                let numVertices = int(random(7, 15));
+                noiseSeed(this.seed);
+                for (let i = 0; i < numVertices; i++) {
+                    let angle = map(i, 0, numVertices, 0, P5_TWO_PI);
+                    let r = this.size * (0.6 + 0.8 * noise(cos(angle) * 2 + 10, sin(angle) * 2 + 20, this.seed * 0.01));
+                    islandVerts.push(createVector(this.pos.x + r * cos(angle), this.pos.y + r * sin(angle)));
+                }
+                this.polygons.push(islandVerts);
+            }
+            draw() { /* ... identico a prima ... */
+                for (const polygon of this.polygons) {
+                    strokeWeight(this.size * 0.20); // Spiaggia un po' meno spessa relativamente
+                    stroke(this.beachColor); noFill();
+                    beginShape();
+                    for (let v of polygon) curveVertex(v.x, v.y);
+                    if (polygon.length > 2) {
+                         curveVertex(polygon[0].x, polygon[0].y);
+                         curveVertex(polygon[1].x, polygon[1].y);
+                         curveVertex(polygon[2].x, polygon[2].y);
+                    }
+                    endShape();
+                    fill(this.color); noStroke();
+                    beginShape();
+                    for (let v of polygon) vertex(v.x, v.y);
+                    endShape(CLOSE);
+
+                    if (this.size > 100) {
+                        for(let i=0; i< polygon.length; i+=2) {
+                            if(random() < 0.3) {
+                                let v = polygon[i];
+                                let treeOffsetX = (noise(v.x*0.1, v.y*0.1, this.seed+100)-0.5) * this.size * 0.2;
+                                let treeOffsetY = (noise(v.x*0.1, v.y*0.1, this.seed+200)-0.5) * this.size * 0.2;
+                                let treeX = v.x + treeOffsetX;
+                                let treeY = v.y + treeOffsetY;
+                                if (collidePointPoly(treeX, treeY, polygon)) {
+                                    fill(50, random(80,120), 30);
+                                    ellipse(treeX, treeY, this.size*0.08, this.size*0.12);
+                                    fill(80,60,40);
+                                    rect(treeX-this.size*0.01, treeY+this.size*0.05, this.size*0.02, this.size*0.05);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function updateWind() { /* ... identico a prima ... */
+            if (!wind) return;
+            let effectiveDeltaTime = deltaTime / 16.66;
+            let da = smallestAngleBetween(wind.targetAngle, wind.angle);
+            wind.angle += da * wind.variability * effectiveDeltaTime; 
+            wind.angle = (wind.angle % P5_TWO_PI + P5_TWO_PI) % P5_TWO_PI;
+            
+            if (abs(da) < 0.01 || random(1) < 0.0005 * effectiveDeltaTime) {
+                 wind.targetAngle = wind.angle + random(-P5_TWO_PI/5, P5_TWO_PI/5);
+                 wind.targetAngle = (wind.targetAngle % P5_TWO_PI + P5_TWO_PI) % P5_TWO_PI;
+            }
+            let ds = wind.targetStrength - wind.strength;
+            wind.strength += ds * wind.strengthVariability * effectiveDeltaTime;
+            if (abs(ds) < 0.05 || random(1) < 0.001 * effectiveDeltaTime) {
+                wind.targetStrength = constrain(random(0.7, 3.2), 0.5, 3.5);
+            }
+        }
+        function smallestAngleBetween(target, source) { /* ... identico a prima ... */
+            let a = (target - source) % P5_TWO_PI;
+            return a > P5_TWO_PI / 2 ? a - P5_TWO_PI : (a < -P5_TWO_PI / 2 ? a + P5_TWO_PI : a);
+        }
+        function getClosestPointOnSegment(p, a, b) { /* ... identico a prima ... */
+            let ap = p5.Vector.sub(p, a); let ab = p5.Vector.sub(b, a);
+            let abMagSq = ab.magSq(); if (abMagSq === 0) return a.copy();
+            let t = constrain(p5.Vector.dot(ap, ab) / abMagSq, 0, 1);
+            return p5.Vector.add(a, ab.mult(t));
+        }
+        function collidePointPoly(px, py, vertices) { /* ... identico a prima ... */
+            var collision = false; var next = 0;
+            for (var current = 0; current < vertices.length; current++) {
+                next = current + 1; if (next == vertices.length) next = 0;
+                var vc = vertices[current]; var vn = vertices[next];
+                if (((vc.y > py && vn.y < py) || (vc.y < py && vn.y > py)) &&
+                    (px < (vn.x - vc.x) * (py - vc.y) / (vn.y - vc.y) + vc.x)) {
+                    collision = !collision;
+                }
+            }
+            return collision;
+        }
+
+        function calculateOptimalSailAngle(boardAngle, currentWindAngle, currentWindStrength) {
+            let bestAngle = 0;
+            let maxPropulsion = -Infinity;
+            let step = 0.05; // Radianti
+
+            for (let testAngle = windsurf.minSailAngle; testAngle <= windsurf.maxSailAngle; testAngle += step) {
+                let propulsion = windsurf.calculatePropulsion(boardAngle, testAngle, currentWindAngle, currentWindStrength);
+                if (propulsion > maxPropulsion) {
+                    maxPropulsion = propulsion;
+                    bestAngle = testAngle;
+                }
+            }
+            // Se nessuna propulsione positiva trovata, non dare un suggerimento "attivo"
+            // (anche se la fisica attuale raramente dà propulsione nulla se c'è vento)
+            if (maxPropulsion <= 0.01 && wind.strength > 0.1) { // 0.01 per piccola tolleranza
+                // Potrebbe indicare un angolo che minimizza la resistenza o neutro,
+                // ma per ora, se non c'è spinta in avanti, l'indicatore potrebbe essere meno utile.
+                // Per ora restituiamo comunque il bestAngle trovato (che sarà quello meno negativo).
+            }
+            return bestAngle;
+        }
+
+
+        // --- P5.JS SETUP ---
+        function setup() {
+            let canvas = createCanvas(windowWidth * 0.98, windowHeight * 0.98);
+            canvas.parent(document.body);
+            pixelDensity(1);
+            
+            P5_TWO_PI = TWO_PI;
+            if (typeof P5_TWO_PI === 'undefined') {
+                 P5_TWO_PI = 2 * Math.PI;
+            }
+
+            wind = {
+                angle: random(P5_TWO_PI), strength: 1.5,
+                targetAngle: random(P5_TWO_PI), targetStrength: 1.5,
+                variability: 0.001, strengthVariability: 0.0005
+            };
+            
+            windsurf = new Windsurf(WORLD_WIDTH / 2, WORLD_HEIGHT / 2);
+            camera = new Camera(windsurf.pos.x - width/2, windsurf.pos.y - height/2);
+            camera.follow(windsurf);
+
+            let numIslands = 60; // Più isole per il mondo grande
+            for (let i = 0; i < numIslands; i++) {
+                let islandX = random(WORLD_WIDTH * 0.02, WORLD_WIDTH * 0.98); // Distribuzione più ampia
+                let islandY = random(WORLD_HEIGHT * 0.02, WORLD_HEIGHT * 0.98);
+                let islandSize = random(120, 600); // Isole potenzialmente più grandi
+                // Distanza minima dal punto di partenza
+                if (dist(islandX, islandY, windsurf.pos.x, windsurf.pos.y) > max(islandSize, 300) + 300) {
+                     islands.push(new Island(islandX, islandY, islandSize, i * 123.456));
+                } else { i--; }
+            }
+            
+            for (let i = 0; i < NUM_OCEAN_PARTICLES; i++) {
+                oceanParticles.push({
+                    x: random(WORLD_WIDTH), y: random(WORLD_HEIGHT),
+                    size: random(0.5, 2.5), opacity: random(15, 50),
+                    speedFactor: random(0.05, 0.25)
+                });
+            }
+            updateWind();
+            updateControlsInfo();
+        }
+
+        // --- P5.JS DRAW LOOP ---
+        function draw() {
+            if (!wind || !windsurf) {
+                background(0); fill(255); textSize(20); textAlign(CENTER,CENTER);
+                text("Loading...", width/2, height/2); return;
+            }
+            background(30, 60, 130);
+
+            windsurf.handleInput();
+            handleTouchControls();
+
+            updateWind();
+            windsurf.update();
+            camera.update();
+
+            for (let island of islands) { // Controllo collisioni
+                if (dist(windsurf.pos.x, windsurf.pos.y, island.pos.x, island.pos.y) < island.size + windsurf.boardLength * 1.5) { // Aumentato un po' il raggio di check per sicurezza
+                    windsurf.checkCollision(island);
+                }
+            }
+
+            push();
+            camera.apply();
+            drawOceanSurface();
+            for (let island of islands) { // Disegno isole
+                if (island.pos.x + island.size > camera.pos.x && island.pos.x - island.size < camera.pos.x + width &&
+                    island.pos.y + island.size > camera.pos.y && island.pos.y - island.size < camera.pos.y + height) {
+                    island.draw();
+                }
+            }
+            windsurf.draw();
+            pop();
+
+            drawWindIndicator();
+            drawSpeedometer();
+            drawSailAngleIndicator();
+            drawMiniMap();
+            if (SHOW_DEBUG_INFO) drawDebugInfo();
+        }
+
+        let waveOffset = 0;
+        function drawOceanSurface() { /* ... identico a prima ... */
+            stroke(180, 200, 230);
+            let effectiveDeltaTime = deltaTime / 16.66;
+            for (let p of oceanParticles) {
+                strokeWeight(p.size); fill(180,200,230, p.opacity);
+                p.x += cos(wind.angle) * wind.strength * p.speedFactor * 0.1 * effectiveDeltaTime;
+                p.y += sin(wind.angle) * wind.strength * p.speedFactor * 0.1 * effectiveDeltaTime;
+                p.x = (p.x % WORLD_WIDTH + WORLD_WIDTH) % WORLD_WIDTH;
+                p.y = (p.y % WORLD_HEIGHT + WORLD_HEIGHT) % WORLD_HEIGHT;
+                if (p.x > camera.pos.x - 10 && p.x < camera.pos.x + width + 10 &&
+                    p.y > camera.pos.y - 10 && p.y < camera.pos.y + height + 10) {
+                    ellipse(p.x, p.y, p.size, p.size);
+                }
+            }
+
+            let waveDetail = 30;
+            let numWaves = ceil(max(width, height) / waveDetail) + 10;
+            waveOffset += wind.strength * 0.03 * effectiveDeltaTime;
+
+            strokeWeight(1 + wind.strength * 0.3);
+            noFill();
+            let waveAngle = wind.angle + P5_TWO_PI/4;
+            let screenCenterXWorld = camera.pos.x + width/2;
+            let screenCenterYWorld = camera.pos.y + height/2;
+
+            for (let i = -numWaves / 2; i < numWaves / 2; i++) {
+                stroke(130, 160, 220, 40 + wind.strength * 15 + sin(i*0.3 + waveOffset*2)*15);
+                let lineBaseDist = i * waveDetail + (waveOffset*20 % waveDetail);
+                let x0 = screenCenterXWorld + cos(waveAngle) * lineBaseDist - sin(waveAngle) * (width*1.5);
+                let y0 = screenCenterYWorld + sin(waveAngle) * lineBaseDist + cos(waveAngle) * (width*1.5);
+                let x1 = screenCenterXWorld + cos(waveAngle) * lineBaseDist + sin(waveAngle) * (width*1.5);
+                let y1 = screenCenterYWorld + sin(waveAngle) * lineBaseDist - cos(waveAngle) * (width*1.5);
+
+                beginShape();
+                let segments = 30;
+                for(let j=0; j<=segments; j++) {
+                    let t = j/segments;
+                    let x = lerp(x0, x1, t);
+                    let y = lerp(y0, y1, t);
+                    let noiseX = (x * cos(wind.angle) + y * sin(wind.angle)) * 0.015;
+                    let noiseY = (-x * sin(wind.angle) + y * cos(wind.angle)) * 0.008;
+                    let noiseVal = noise(noiseX + waveOffset * 0.3, noiseY + i * 0.1);
+                    let amplitude = (5 + wind.strength * 3) * (0.5 + noiseVal * 1.5);
+                    let vx = x + sin(waveAngle) * amplitude;
+                    let vy = y - cos(waveAngle) * amplitude;
+                    curveVertex(vx, vy);
+                }
+                endShape();
+            }
+        }
+        function drawWindIndicator() { /* ... identico a prima ... */
+            let R = 35; let cx = width - R - 20; let cy = R + 20;
+            push();
+            translate(cx, cy);
+            fill(255, 255, 255, 70); noStroke(); ellipse(0,0, R*2, R*2);
+            stroke(255,255,255,100); strokeWeight(0.5);
+            for(let a=0; a<P5_TWO_PI; a+=P5_TWO_PI/16) line(0,0, cos(a)*R, sin(a)*R);
+            line(0,-R,0,R); line(-R,0,R,0);
+
+            rotate(wind.angle);
+            let arrowLen = R * 0.8 + wind.strength * 3;
+            stroke(255,50,50); strokeWeight(2 + wind.strength); line(0,0, arrowLen,0);
+            fill(255,50,50); noStroke();
+            triangle(arrowLen,0, arrowLen-8,-4, arrowLen-8,4);
+            pop();
+            fill(255); textSize(11); textAlign(CENTER,CENTER);
+            text(wind.strength.toFixed(1) + " kn", cx, cy + R + 10);
+            text("VENTO", cx, cy - R - 10);
+        }
+        function drawSpeedometer() { /* ... identico a prima ... */
+            let speed = windsurf.getSpeed();
+            let cx = 70; let cy = height - 70; let R = 40;
+            push();
+            translate(cx, cy);
+            noFill(); stroke(255,255,255,100); strokeWeight(8);
+            arc(0,0, R*2, R*2, P5_TWO_PI * 0.375, P5_TWO_PI * 0.125);
+            let speedAngle = map(speed, 0, windsurf.maxSpeed, P5_TWO_PI * 0.375, P5_TWO_PI * 0.125);
+            stroke(100,200,255); strokeWeight(6);
+            arc(0,0, R*2, R*2, P5_TWO_PI * 0.375, speedAngle);
+            rotate(speedAngle);
+            stroke(255); strokeWeight(2); line(0,0,R*0.9,0);
+            pop();
+            fill(255); textSize(14); textAlign(CENTER,CENTER);
+            text(speed.toFixed(1), cx, cy);
+            textSize(10); text("m/s", cx, cy + R*0.5 + 5);
+        }
+
+        function drawSailAngleIndicator() {
+            let cx = width - 70; let cy = height - 70; let R = 30;
+            push();
+            translate(cx, cy);
+            
+            // Tavola stilizzata (riferimento)
+            fill(200,170,110,100); noStroke();
+            rect(-5, -R*0.8, 10, R*1.6, 3);
+
+            // Indicatore VELA OTTIMALE (se attivo)
+            if (SHOW_SAIL_HINT && windsurf) {
+                let optimalSailAngle = calculateOptimalSailAngle(windsurf.angle, wind.angle, wind.strength);
+                push();
+                rotate(optimalSailAngle);
+                stroke(0, 255, 0, 180); // Verde per suggerimento
+                strokeWeight(2.5);
+                line(0, 0, R * 1.3, 0); // Linea che indica l'angolo ideale
+                fill(0,255,0,150); noStroke();
+                ellipse(R*1.3,0,6,6);
+                pop();
+            }
+
+            // Vela attuale
+            rotate(windsurf.sailAngle);
+            fill(230,230,250,150); stroke(50); strokeWeight(1);
+            beginShape();
+            vertex(0,0); vertex(R*1.2, R*0.2); vertex(R*1.1, -R*0.2);
+            endShape(CLOSE);
+            pop();
+            fill(255); textSize(10); textAlign(CENTER,CENTER);
+            text("VELA", cx, cy + R + 10);
+            if(SHOW_SAIL_HINT) text("(H per Hint)", cx, cy + R + 22);
+        }
+        function drawMiniMap() { /* ... identico a prima ... */
+            let mapSize = min(width, height) * 0.18;
+            let mapX = width - mapSize - 20; let mapY = height - mapSize - 20 - 70;
+            if (mapY < 100) mapY = 100;
+            let sX = mapSize / WORLD_WIDTH; let sY = mapSize / WORLD_HEIGHT;
+
+            push();
+            translate(mapX, mapY);
+            fill(0, 40, 90, 130); noStroke(); rect(0,0, mapSize, mapSize, 5);
+            for (let island of islands) {
+                fill(island.color);
+                beginShape();
+                for (let v of island.polygons[0]) vertex(v.x * sX, v.y * sY);
+                endShape(CLOSE);
+            }
+            fill(255,0,0); ellipse(windsurf.pos.x*sX, windsurf.pos.y*sY, 5,5);
+            noFill(); stroke(255,255,255,80); strokeWeight(1);
+            rect(camera.pos.x*sX, camera.pos.y*sY, width*sX, height*sY);
+            pop();
+        }
+        function drawDebugInfo() { /* ... identico a prima ... */
+            fill(255);textSize(12);textAlign(LEFT,TOP);
+            let y = 10; const dy = 15;
+            text(`Pos: ${windsurf.pos.x.toFixed(0)}, ${windsurf.pos.y.toFixed(0)}`, 10, y); y+=dy;
+            text(`FPS: ${frameRate().toFixed(1)}`, 10, y); y+=dy;
+            text(`Touches: ${touches.length}`, 10, y); y+=dy;
+            if(touchState.steer.active) text(`Steer ID: ${touchState.steer.id}`,10,y); y+=dy;
+            if(touchState.sail.active) text(`Sail ID: ${touchState.sail.id}`,10,y); y+=dy;
+        }
+        function updateControlsInfo() { /* ... identico a prima ... */
+            let info = "<b>Controlli:</b><br>";
+            if (isTouchDevice()) {
+                info += "Sx Schermo (Trascina): Vira<br>Dx Schermo (Trascina Vert.): Vela";
+            } else {
+                info += "FRECCE Sx/Dx: Vira<br>A/D: Regola Vela<br>H: Mostra/Nascondi Hint Vela";
+            }
+            document.getElementById('controlsInfo').innerHTML = info;
+        }
+        function isTouchDevice() { return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0); }
+        function handleTouchControls() { /* ... identico a prima ... */
+            if (!isTouchDevice()) return;
+            let effectiveDeltaTime = deltaTime / 16.66;
+            if (touchState.steer.active) {
+                let currentTouch = touches.find(t => t.id === touchState.steer.id);
+                if (currentTouch) {
+                    let dx = currentTouch.x - touchState.steer.startX;
+                    windsurf.turn(constrain(dx * 0.01, -1, 1)); // La funzione turn ora considera deltaTime
+                } else { touchState.steer.active = false; }
+            }
+            if (touchState.sail.active) {
+                let currentTouch = touches.find(t => t.id === touchState.sail.id);
+                if (currentTouch) {
+                    let dy = currentTouch.y - touchState.sail.startY;
+                    windsurf.adjustSail(constrain(-dy * 0.01, -1, 1)); // adjustSail ora considera deltaTime
+                } else { touchState.sail.active = false; }
+            }
+        }
+        function touchStarted(event) { /* ... identico a prima ... */
+            if (!isTouchDevice()) return true;
+            for (let touch of touches) {
+                if (touch.x < width * 0.45 && !touchState.steer.active) {
+                    touchState.steer.active = true; touchState.steer.startX = touch.x; touchState.steer.id = touch.id;
+                } else if (touch.x > width * 0.55 && !touchState.sail.active) {
+                    touchState.sail.active = true; touchState.sail.startY = touch.y; touchState.sail.id = touch.id;
+                }
+            }
+            return false;
+        }
+        function touchEnded(event) { /* ... identico a prima ... */
+            if (!isTouchDevice()) return true;
+            for (let endedTouch of event.changedTouches) {
+                if (endedTouch.identifier === touchState.steer.id) {
+                    touchState.steer.active = false; touchState.steer.id = -1;
+                }
+                if (endedTouch.identifier === touchState.sail.id) {
+                    touchState.sail.active = false; touchState.sail.id = -1;
+                }
+            }
+            if (touches.length === 0) {
+                touchState.steer.active = false; touchState.steer.id = -1;
+                touchState.sail.active = false; touchState.sail.id = -1;
+            }
+            return false;
+        }
+        
+        // Funzione per gestire il toggle dell'hint
+        function keyPressed() {
+            if (key === 'h' || key === 'H') {
+                SHOW_SAIL_HINT = !SHOW_SAIL_HINT;
+                updateControlsInfo(); // Aggiorna info se necessario
+            }
+        }
+
+        function windowResized() { /* ... identico a prima ... */
+            resizeCanvas(windowWidth * 0.98, windowHeight * 0.98);
+            updateControlsInfo();
+            if (camera) {
+                 camera.pos.x = constrain(camera.pos.x, 0, WORLD_WIDTH - width);
+                 camera.pos.y = constrain(camera.pos.y, 0, WORLD_HEIGHT - height);
+            }
+        }
+
+    </script>
+</body>
+</html>
