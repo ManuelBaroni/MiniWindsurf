@@ -420,45 +420,149 @@
                     let vx = x + sin(waveAngle) * amplitude; let vy = y - cos(waveAngle) * amplitude; curveVertex(vx, vy);
                 } endShape(); }
         }
-        function drawWindIndicator() { /* ... identico a prima ... */
-            let R = 35; let cx = width - R - 20; let cy = R + 20; push(); translate(cx, cy);
-            fill(255, 255, 255, 70); noStroke(); ellipse(0,0, R*2, R*2);
-            stroke(255,255,255,100); strokeWeight(0.5);
-            for(let a=0; a<P5_TWO_PI; a+=P5_TWO_PI/16) line(0,0, cos(a)*R, sin(a)*R);
-            line(0,-R,0,R); line(-R,0,R,0); rotate(wind.angle);
-            let arrowLen = R * 0.8 + wind.strength * 3; stroke(255,50,50); strokeWeight(2 + wind.strength); line(0,0, arrowLen,0);
-            fill(255,50,50); noStroke(); triangle(arrowLen,0, arrowLen-8,-4, arrowLen-8,4); pop();
-            fill(255); textSize(11); textAlign(CENTER,CENTER); text(wind.strength.toFixed(1) + " kn", cx, cy + R + 10); text("VENTO", cx, cy - R - 10);
-        }
-        function drawSpeedometer() { /* ... identico a prima ... */
-            let speed = windsurf.getSpeed(); let cx = 70; let cy = height - 70; let R = 40; push(); translate(cx, cy);
-            noFill(); stroke(255,255,255,100); strokeWeight(8); arc(0,0, R*2, R*2, P5_TWO_PI * 0.375, P5_TWO_PI * 0.125);
-            let speedAngle = map(speed, 0, windsurf.maxSpeed, P5_TWO_PI * 0.375, P5_TWO_PI * 0.125);
-            stroke(100,200,255); strokeWeight(6); arc(0,0, R*2, R*2, P5_TWO_PI * 0.375, speedAngle);
-            rotate(speedAngle); stroke(255); strokeWeight(2); line(0,0,R*0.9,0); pop();
-            fill(255); textSize(14); textAlign(CENTER,CENTER); text(speed.toFixed(1), cx, cy);
-            textSize(10); text("m/s", cx, cy + R*0.5 + 5);
-        }
+              // --- FUNZIONI HUD RIVISTE PER MIGLIORE RESPONSIVITÀ ---
 
-        function drawSailAngleIndicator() { // Modificato: rimosso hint
-            let cx = width - 70; let cy = height - 70; let R = 30;
+        function drawWindIndicator() {
+            let R = min(width, height) * 0.045; // Raggio relativo
+            let margin = min(width, height) * 0.03;
+            let cx = width - R - margin;
+            let cy = R + margin;
+
             push();
             translate(cx, cy);
-            fill(200,170,110,100); noStroke(); rect(-5, -R*0.8, 10, R*1.6, 3); // Tavola
-            rotate(windsurf.sailAngle); // Angolo vela attuale (auto-impostato)
-            fill(230,230,250,150); stroke(50); strokeWeight(1);
-            beginShape(); vertex(0,0); vertex(R*1.2, R*0.2); vertex(R*1.1, -R*0.2); endShape(CLOSE); // Vela
+            fill(255, 255, 255, 70); noStroke(); ellipse(0,0, R*2, R*2);
+            stroke(255,255,255,100); strokeWeight(max(1, R*0.02)); // Stroke weight relativo
+            for(let a=0; a<P5_TWO_PI; a+=P5_TWO_PI/16) line(0,0, cos(a)*R, sin(a)*R);
+            line(0,-R,0,R); line(-R,0,R,0);
+
+            rotate(wind.angle);
+            let arrowLen = R * 0.8 + wind.strength * (R * 0.08); // Lunghezza freccia relativa
+            stroke(255,50,50); strokeWeight(max(1.5, R*0.07 + wind.strength * 0.5)); line(0,0, arrowLen,0);
+            fill(255,50,50); noStroke();
+            triangle(arrowLen,0, arrowLen-R*0.2,-R*0.1, arrowLen-R*0.2,R*0.1); // Triangolo relativo
             pop();
-            fill(255); textSize(10); textAlign(CENTER,CENTER); text("VELA", cx, cy + R + 10);
+
+            fill(255); textSize(max(9, R*0.3)); textAlign(CENTER,CENTER);
+            text(wind.strength.toFixed(1) + " kn", cx, cy + R + margin*0.3);
+            text("VENTO", cx, cy - R - margin*0.3);
         }
-        function drawMiniMap() { /* ... identico a prima ... */
-            let mapSize = min(width, height) * 0.18; let mapX = width - mapSize - 20; let mapY = height - mapSize - 20 - 70;
-            if (mapY < 100) mapY = 100; let sX = mapSize / WORLD_WIDTH; let sY = mapSize / WORLD_HEIGHT;
-            push(); translate(mapX, mapY); fill(0, 40, 90, 130); noStroke(); rect(0,0, mapSize, mapSize, 5);
-            for (let island of islands) { fill(island.color); beginShape(); for (let v of island.polygons[0]) vertex(v.x * sX, v.y * sY); endShape(CLOSE); }
-            fill(255,0,0); ellipse(windsurf.pos.x*sX, windsurf.pos.y*sY, 5,5);
-            noFill(); stroke(255,255,255,80); strokeWeight(1); rect(camera.pos.x*sX, camera.pos.y*sY, width*sX, height*sY); pop();
+
+        function drawSpeedometer() {
+            let R = min(width, height) * 0.055; // Raggio relativo
+            let margin = min(width, height) * 0.03;
+            let cx = R + margin;
+            let cy = height - R - margin;
+
+            push();
+            translate(cx, cy);
+            noFill(); stroke(255,255,255,100); strokeWeight(max(3, R*0.2));
+            arc(0,0, R*2, R*2, P5_TWO_PI * 0.375, P5_TWO_PI * 0.125);
+            let speed = windsurf.getSpeed();
+            let speedAngle = map(speed, 0, windsurf.maxSpeed, P5_TWO_PI * 0.375, P5_TWO_PI * 0.125);
+            stroke(100,200,255); strokeWeight(max(2.5, R*0.15));
+            arc(0,0, R*2, R*2, P5_TWO_PI * 0.375, speedAngle);
+            rotate(speedAngle);
+            stroke(255); strokeWeight(max(1, R*0.05)); line(0,0,R*0.9,0);
+            pop();
+
+            fill(255); textSize(max(10, R*0.35)); textAlign(CENTER,CENTER);
+            text(speed.toFixed(1), cx, cy);
+            textSize(max(8, R*0.25)); text("m/s", cx, cy + R*0.5 + margin*0.2);
         }
+
+        function drawSailAngleIndicator() {
+            let R = min(width, height) * 0.04; // Raggio relativo
+            let margin = min(width, height) * 0.03;
+            let cx = width - R - margin;
+            let cy = height - R - margin; // Sotto il tachimetro
+
+            push();
+            translate(cx, cy);
+            fill(200,170,110,100); noStroke();
+            rect(-R*0.15, -R*0.8, R*0.3, R*1.6, R*0.1); // Tavola stilizzata relativa
+
+            rotate(windsurf.sailAngle);
+            fill(230,230,250,150); stroke(50); strokeWeight(max(1, R*0.04));
+            beginShape();
+            vertex(0,0); vertex(R*1.2, R*0.2); vertex(R*1.1, -R*0.2);
+            endShape(CLOSE);
+            pop();
+
+            fill(255); textSize(max(8, R*0.25)); textAlign(CENTER,CENTER);
+            text("VELA", cx, cy + R + margin*0.3);
+        }
+
+        function drawMiniMap() {
+            let mapSize = min(width, height) * 0.15; // Dimensione mappa relativa
+            let margin = min(width, height) * 0.03;
+            // Posizionamento: sotto l'indicatore del vento e a destra dell'indicatore della vela
+            // per evitare sovrapposizioni, se possibile. O in un angolo diverso.
+            // Prova in alto a sinistra, sotto il tachimetro
+            let mapX = margin; //min(width, height) * 0.03 + min(width, height) * 0.055 * 2 + min(width, height) * 0.03; // A destra del tachimetro
+            let mapY = height - mapSize - margin;
+            
+            // O in alto a destra sotto l'indicatore del vento
+            // let mapX = width - mapSize - margin;
+            // let mapY = min(width, height) * 0.03 + min(width, height) * 0.045 * 2 + min(width, height) * 0.03;
+
+            // Proviamo in basso a destra, ma assicurandoci che non si sovrapponga all'indicatore della vela
+            let sailIndicatorBottomY = height - (min(width, height) * 0.04) - (min(width, height) * 0.03) + (min(width, height) * 0.04) + (min(width, height) * 0.03 * 0.3); // Stima Y inferiore indicatore vela
+            mapY = height - mapSize - margin;
+            mapX = width - mapSize - margin;
+            
+            // Se troppo affollato in basso a destra, spostalo in alto a sinistra
+             if (width < 450 || height < 450) { // Soglia per schermi piccoli
+                 mapX = margin;
+                 mapY = margin + (min(width, height) * 0.045 * 2) + (min(width, height) * 0.03 * 2); // Sotto indicatore vento
+                 // Assicurati che non si sovrapponga al tachimetro
+                 let speedoRightX = (min(width, height) * 0.055 + margin) + min(width, height) * 0.055;
+                 if (mapX + mapSize > speedoRightX && mapY < (height - margin)) { // Se c'è rischio di sovrapposizione
+                     // Potrebbe essere necessario un layout più complesso o sacrificare un elemento su schermi molto piccoli
+                 }
+             }
+
+
+            let sX = mapSize / WORLD_WIDTH; let sY = mapSize / WORLD_HEIGHT;
+
+            push();
+            translate(mapX, mapY);
+            fill(0, 40, 90, 130); noStroke(); rect(0,0, mapSize, mapSize, max(2, mapSize*0.03)); // Angoli arrotondati relativi
+            
+            // Isole
+            for (let island of islands) {
+                fill(island.color);
+                beginShape();
+                for (let v of island.polygons[0]) vertex(v.x * sX, v.y * sY);
+                endShape(CLOSE);
+            }
+            // Windsurf
+            fill(255,0,0); ellipse(windsurf.pos.x*sX, windsurf.pos.y*sY, max(2, mapSize*0.015), max(2, mapSize*0.015));
+            // Viewport Camera
+            noFill(); stroke(255,255,255,80); strokeWeight(max(1, mapSize*0.005));
+            rect(camera.pos.x*sX, camera.pos.y*sY, width*sX, height*sY);
+            pop();
+        }
+
+        function updateControlsInfo() {
+            let info = "<b>Controlli Tastiera:</b><br>";
+            info += "FRECCE Sx/Dx: Vira<br>";
+            info += "FRECCIA SU / W: Accelera<br>";
+            info += "FRECCIA GIU / S: Frena<br><br>";
+
+            let controlDiv = document.getElementById('controlsInfo');
+            if (isTouchDevice()) {
+                info += "<b>Controlli Touch:</b><br>";
+                info += "Trascina Metà Sx Schermo: Vira<br>";
+                info += "<i>(Premi per Accel/Freno presto!)</i>"; // Placeholder
+                controlDiv.style.fontSize = "10px"; // Testo più piccolo su touch
+                controlDiv.style.padding = "3px";
+            } else {
+                controlDiv.style.fontSize = "12px";
+                controlDiv.style.padding = "5px";
+            }
+            controlDiv.innerHTML = info;
+        }
+        
         function drawDebugInfo() { /* ... identico a prima ... */
              fill(255);textSize(12);textAlign(LEFT,TOP); let y = 10; const dy = 15;
             text(`Pos: ${windsurf.pos.x.toFixed(0)}, ${windsurf.pos.y.toFixed(0)}`, 10, y); y+=dy;
@@ -468,18 +572,7 @@
             text(`Touches: ${touches.length}`, 10, y); y+=dy;
             if(touchState.steer.active) text(`Steer ID: ${touchState.steer.id}`,10,y); y+=dy;
         }
-        function updateControlsInfo() { // Modificato
-            let info = "<b>Controlli Tastiera:</b><br>";
-            info += "FRECCE Sx/Dx: Vira Tavola<br>";
-            info += "FRECCIA SU / W: Accelerare<br>";
-            info += "FRECCIA GIU / S: Decelerare/Frenare<br><br>";
-            if (isTouchDevice()) {
-                info += "<b>Controlli Touch:</b><br>";
-                info += "Trascina Metà Sx Schermo: Vira<br>";
-                info += "(Accel/Decel touch non ancora implementato)";
-            }
-            document.getElementById('controlsInfo').innerHTML = info;
-        }
+        
         function isTouchDevice() { return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0); }
         
         function handleTouchControls() { // Modificato: rimosso controllo vela
