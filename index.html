@@ -322,7 +322,73 @@
             }
 
             checkCollision(island) { /* ... identico ... */ }
-            draw() { /* ... identico alla versione precedente con l'arco ... */ } // Il disegno dell'arco dovrebbe già essere corretto
+                        draw() {
+                push();
+                translate(this.pos.x, this.pos.y);
+                rotate(this.angle); // Ruota per la tavola
+
+                // Disegno scia
+                let speed = this.vel.mag();
+                if (speed > 0.3) {
+                    stroke(255, 255, 255, map(speed, 0.3, this.maxSpeed, 20, 120));
+                    let wakeWidth = map(speed, 0.3, this.maxSpeed, 1, this.boardWidth * 0.7);
+                    let wakeLength = map(speed, 0.3, this.maxSpeed, 15, 90);
+                    strokeWeight(wakeWidth * 0.5);
+                    line(0, this.boardWidth * 0.25, -wakeLength, this.boardWidth * 0.35);
+                    line(0, -this.boardWidth * 0.25, -wakeLength, -this.boardWidth * 0.35);
+                    strokeWeight(wakeWidth);
+                    line(0, 0, -wakeLength * 0.7, 0);
+                }
+                
+                // Disegno tavola
+                fill(200, 170, 110); stroke(80, 60, 40); strokeWeight(1.5);
+                beginShape();
+                vertex(-this.boardLength / 2, 0); 
+                bezierVertex(-this.boardLength / 2 * 0.9, -this.boardWidth / 2 * 0.8, -this.boardLength / 3, -this.boardWidth / 2, 0, -this.boardWidth / 2);
+                vertex(this.boardLength / 2 * 0.6, -this.boardWidth / 2 * 0.7); 
+                bezierVertex(this.boardLength / 2 * 0.85, -this.boardWidth / 2 * 0.3, this.boardLength / 2, -this.boardWidth * 0.1, this.boardLength / 2, 0);
+                bezierVertex(this.boardLength / 2, this.boardWidth * 0.1, this.boardLength / 2 * 0.85, this.boardWidth / 2 * 0.3, this.boardLength / 2 * 0.6, this.boardWidth / 2 * 0.7);
+                vertex(0, this.boardWidth / 2);
+                bezierVertex(-this.boardLength / 3, this.boardWidth / 2, -this.boardLength / 2 * 0.9, this.boardWidth / 2 * 0.8, -this.boardLength / 2, 0);
+                endShape(CLOSE);
+                fill(180,150,100, 150); noStroke(); ellipse(-this.boardLength*0.35, 0, 10, this.boardWidth*0.6);
+                // Non disegniamo più l'albero visibile
+                // fill(60,60,60); rect(this.mastAttachmentPointX - 4, -4, 8, 8, 2); // Piccolo quadrato per punto attacco (opzionale)
+
+
+                // --- NUOVO DISEGNO VELA COME ARCO VISTO DALL'ALTO ---
+                push();
+                // Sposta l'origine al punto di attacco della vela sulla tavola
+                translate(this.mastAttachmentPointX, 0);
+                // Ruota per l'angolo relativo della vela (boma)
+                rotate(this.currentSailAngle);
+
+                fill(230, 230, 240, 200); // Colore vela
+                stroke(40, 40, 60);
+                strokeWeight(1.5);
+
+                let p1x = 0;
+                let p1y = 0;
+                let p3x = this.sailBaseLength;
+                let p3y = 0;
+                let controlX = this.sailBaseLength / 2;
+                
+                let archSign = Math.sign(this.currentSailAngle + 0.0001);
+                if (this.currentSailAngle === 0) archSign = -1; 
+
+                let controlY = archSign * this.currentSailArchDepth;
+
+                beginShape();
+                vertex(p1x, p1y); 
+                quadraticVertex(controlX, controlY, p3x, p3y); 
+                vertex(p3x,p3y); 
+                endShape(CLOSE); 
+
+                pop(); // Fine trasformazioni vela
+                // --- FINE NUOVO DISEGNO VELA ---
+                
+                pop(); // Fine trasformazioni windsurf
+            }
             getSpeed() { return this.vel.mag(); }
         }
         
