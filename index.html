@@ -93,27 +93,25 @@
             }
             apply() { translate(-this.pos.x, -this.pos.y); }
         }
-
-              // --- CLASSE WINDSURF (CON VELA CURVA DINAMICA) ---
+        // --- CLASSE WINDSURF (CON VELA AD ARCO ISPIRATA ALL'IMMAGINE) ---
         class Windsurf {
             constructor(x, y) {
                 this.pos = createVector(x, y);
                 this.vel = createVector(0, 0);
                 this.angle = -P5_TWO_PI / 4;
 
-                this.currentSailAngle = 0;
+                this.currentSailAngle = 0; // Angolo RELATIVO attuale della vela
                 this.targetSailAngle = 0;
-                this.sailRotationSpeed = P5_TWO_PI * 0.35;
+                this.sailRotationSpeed = P5_TWO_PI * 0.40; // Aumentata ancora un po' per reattività
 
                 this.boardWidth = 22;
                 this.boardLength = 80;
-                this.sailBoomLength = 55; // Lunghezza del boma
-                this.sailMastHeight = 70; // Altezza dell'albero dalla base del boma al top
+                this.sailBoomLength = 55;
+                this.sailMastHeight = 70;
                 this.mastOffset = -this.boardLength * 0.15;
 
-                // Parametri per la curvatura della vela
-                this.maxSailDepthFactor = 0.25; // Fattore massimo di "pancia" (es. 25% della lunghezza del boma)
-                this.currentSailDepth = 0;    // "Pancia" attuale della vela
+                this.maxSailDepthFactor = 0.28; // Aumentato leggermente per più pancia visibile
+                this.currentSailDepth = 0;
 
                 this.maxSpeed = 7;
                 this.turnRate = 0.04;
@@ -128,7 +126,6 @@
 
             // handleInput, turn, calculatePropulsionForRelativeSail, calculateOptimalRelativeSailAngle
             // rimangono IDENTICI alla versione precedente.
-
             handleInput() { /* ... identico ... */
                 let effectiveDeltaTime = deltaTime / 16.66;
                 if (keyIsDown(LEFT_ARROW)) this.turn(-1, effectiveDeltaTime);
@@ -153,7 +150,7 @@
                 return propulsion;
             }
             calculateOptimalRelativeSailAngle(boardAngle, currentWindAngle, currentWindStrength) { /* ... identico ... */
-                let bestRelativeAngle = 0; let maxPropulsion = -Infinity; let step = P5_TWO_PI / 72;
+                let bestRelativeAngle = 0; let maxPropulsion = -Infinity; let step = P5_TWO_PI / 72; // ~5 gradi di step
                 for (let testRelAngle = -P5_TWO_PI / 2; testRelAngle <= P5_TWO_PI / 2; testRelAngle += step) {
                     let currentTestAngle = (testRelAngle % P5_TWO_PI + P5_TWO_PI) % P5_TWO_PI;
                     if (currentTestAngle > P5_TWO_PI / 2) currentTestAngle -= P5_TWO_PI;
@@ -181,28 +178,27 @@
 
                 // Calcolo della "pancia" della vela
                 let sailGlobalAngle = this.angle + this.currentSailAngle;
-                let windToSailAngle = smallestAngleBetween(wind.angle, sailGlobalAngle);
-                // La pancia è massima quando il vento colpisce la vela di lato (vicino a +/- PI/2 rispetto all'angolo della vela)
-                // e minima quando è di prua/poppa (vicino a 0 o PI)
-                let pressureFactor = abs(sin(windToSailAngle)); // sin(0)=0, sin(PI/2)=1
-                let targetSailDepth = this.maxSailDepthFactor * this.sailBoomLength * pressureFactor * wind.strength * 0.5; // Scalato anche per forza vento
+                // Angolo del vento rispetto alla direzione NORMALE della vela.
+                // La normale è dove la vela riceve la massima spinta (velaGlobalAngle + PI/2).
+                // Se il vento è allineato con questa normale (angolo = 0), la pressione è massima.
+                // Se il vento è a 90 gradi dalla normale (parallelo alla vela), la pressione è minima.
+                let windToSailNormal = smallestAngleBetween(wind.angle, sailGlobalAngle + P5_TWO_PI / 4);
+                let pressureFactor = cos(windToSailNormal); // cos(0)=1 (max pressione), cos(PI/2)=0 (min pressione)
+                pressureFactor = max(0, pressureFactor); // Ignora pressione negativa (vento da dietro la normale) per la pancia
+
+                let targetSailDepth = this.maxSailDepthFactor * this.sailBoomLength * pressureFactor * (wind.strength / 1.5); // Scalato per forza vento media
                 targetSailDepth = constrain(targetSailDepth, 0, this.maxSailDepthFactor * this.sailBoomLength);
                 
-                // Smussa il cambiamento della pancia
-                this.currentSailDepth += (targetSailDepth - this.currentSailDepth) * 0.1 * effectiveDeltaTime;
+                this.currentSailDepth += (targetSailDepth - this.currentSailDepth) * 0.15 * effectiveDeltaTime; // Un po' più reattiva
 
-
+                // ... (resto di update: Propulsione, Attrito, Resistenza Laterale, ecc. è IDENTICO) ...
                 let rawSailPropulsion = this.calculatePropulsionForRelativeSail(this.angle, this.currentSailAngle, wind.angle, wind.strength);
                 let effectiveAccelerationFactor = this.baseAccelerationFactor * (1 + this.sailEfficiencyModifier);
                 effectiveAccelerationFactor = max(0, effectiveAccelerationFactor);
-                
                 let finalPropulsion = rawSailPropulsion;
                 let boardDirection = p5.Vector.fromAngle(this.angle);
                 let sailAcceleration = boardDirection.copy().mult(finalPropulsion * effectiveAccelerationFactor);
                 this.vel.add(p5.Vector.mult(sailAcceleration, effectiveDeltaTime));
-
-                // ... (resto di update: Attrito, Resistenza Laterale, Limita Velocità, Posizione, Bordi Mondo) ...
-                // è IDENTICO alla versione precedente
                 let frictionForce = this.vel.copy().mult(-this.friction);
                 this.vel.add(p5.Vector.mult(frictionForce, effectiveDeltaTime));
                 let perpendicularToBoard = p5.Vector.fromAngle(this.angle + P5_TWO_PI / 4);
@@ -217,10 +213,8 @@
                 if (this.pos.x > WORLD_WIDTH - this.boardLength / 2) { this.pos.x = WORLD_WIDTH - this.boardLength / 2; this.vel.x *= -0.3; }
                 if (this.pos.y < this.boardLength / 2) { this.pos.y = this.boardLength / 2; this.vel.y *= -0.3; }
                 if (this.pos.y > WORLD_HEIGHT - this.boardLength / 2) { this.pos.y = WORLD_HEIGHT - this.boardLength / 2; this.vel.y *= -0.3; }
-
             }
 
-            // checkCollision è invariata
             checkCollision(island) { /* ... identico ... */ 
                  for (const polygon of island.polygons) {
                     if (collidePointPoly(this.pos.x, this.pos.y, polygon)) {
@@ -248,15 +242,13 @@
                 return false;
             }
 
-
             draw() {
                 push();
                 translate(this.pos.x, this.pos.y);
-                rotate(this.angle); // Angolo della tavola
+                rotate(this.angle);
 
-                // Disegno scia (identico)
                 let speed = this.vel.mag();
-                if (speed > 0.3) { /* ... */ 
+                if (speed > 0.3) { /* ... scia ... */ 
                     stroke(255, 255, 255, map(speed, 0.3, this.maxSpeed, 20, 120));
                     let wakeWidth = map(speed, 0.3, this.maxSpeed, 1, this.boardWidth * 0.7);
                     let wakeLength = map(speed, 0.3, this.maxSpeed, 15, 90);
@@ -267,9 +259,8 @@
                     line(0, 0, -wakeLength * 0.7, 0);
                 }
                 
-                // Disegno tavola (identico)
                 fill(200, 170, 110); stroke(80, 60, 40); strokeWeight(1.5);
-                beginShape(); /* ... */ 
+                beginShape(); /* ... tavola ... */ 
                 vertex(-this.boardLength / 2, 0); 
                 bezierVertex(-this.boardLength / 2 * 0.9, -this.boardWidth / 2 * 0.8, -this.boardLength / 3, -this.boardWidth / 2, 0, -this.boardWidth / 2);
                 vertex(this.boardLength / 2 * 0.6, -this.boardWidth / 2 * 0.7); 
@@ -281,95 +272,97 @@
                 fill(180,150,100, 150); noStroke(); ellipse(-this.boardLength*0.35, 0, 10, this.boardWidth*0.6);
                 fill(60,60,60); rect(this.mastOffset - 8, -3, 16, 6, 2);
 
+                translate(this.mastOffset, 0);
+                fill(50, 50, 60); ellipse(0, 0, 10, 10);
 
-                translate(this.mastOffset, 0); // Sposta all'albero
-                fill(50, 50, 60); ellipse(0, 0, 10, 10); // Albero
+                rotate(this.currentSailAngle);
 
-                rotate(this.currentSailAngle); // USA L'ANGOLO ATTUALE SMUSSATO
-
-                // --- NUOVO DISEGNO VELA CURVA ---
+                // --- DISEGNO VELA AD ARCO ---
                 fill(235, 235, 250, 190 + sin(frameCount * 0.05 + this.pos.x * 0.005 + this.pos.y * 0.003) * 35);
                 stroke(50, 50, 70); strokeWeight(1.5);
 
-                // Punti chiave della vela
-                let mastTopY = -this.sailMastHeight;    // Y del top dell'albero (relativo alla base del boma)
-                let mastBaseY = 0;                      // Y della base del boma (all'albero)
-                let boomEndX = this.sailBoomLength;     // X della fine del boma
-                let boomEndY = 0;                       // Y della fine del boma (attacco bugna)
+                let mastTopY = -this.sailMastHeight;
+                let mastBaseX = 0; // L'albero è all'origine locale
+                let mastBaseY = 0;
+                let boomEndX = this.sailBoomLength;
+                let boomEndY = 0;
 
-                // Punti di controllo per la curvatura (pancia)
-                // La pancia è perpendicolare al boma.
-                // La direzione della pancia dipende da currentSailAngle:
-                // se la vela è a sinistra della tavola (angolo negativo), la pancia va "sotto" (Y positivo)
-                // se la vela è a destra (angolo positivo), la pancia va "sopra" (Y negativo)
-                // Tuttavia, la pancia dovrebbe sempre essere "sottovento" rispetto alla direzione del vento apparente sulla vela.
-                // Per semplicità, la facciamo curvare sempre dalla stessa parte rispetto al boma,
-                // e l'illusione della direzione del vento sarà data dall'angolo globale della vela.
-                // Un approccio più realistico considererebbe il lato del vento.
-                // Per ora, facciamo la pancia "verso Y negativo" (se vista localmente)
+                // Determina il segno della pancia (da che lato si gonfia)
+                // L'asse della vela va da (mastBaseX, mastBaseY) a (boomEndX, boomEndY)
+                // Nel sistema di coordinate locale della vela (ruotato con currentSailAngle),
+                // quest'asse è lungo l'asse X positivo.
+                // Il vento globale è wind.angle. L'angolo globale della vela è this.angle + this.currentSailAngle.
+                // Vogliamo sapere se il vento colpisce la vela da "sopra" (Y negativo locale) o "sotto" (Y positivo locale).
                 
-                let sailDepthSign = -1; // Default: pancia "in alto"
-                // Se l'angolo della vela è molto girato (>90 gradi o < -90 gradi relativi alla tavola),
-                // la pancia potrebbe dover invertire per sembrare corretta rispetto al flusso del vento.
-                // Questo è complesso. Per ora, teniamo un segno fisso e vediamo l'effetto.
-                // Se currentSailAngle è tra -PI/2 e PI/2, la pancia è tipicamente da un lato.
-                // Se è oltre, l'altro lato diventa sopravvento.
-                // In alternativa, la pancia è sempre "lontana" dal vento.
-                // Angolo globale della vela: this.angle + this.currentSailAngle
-                // Angolo del vento: wind.angle
-                // Se il vento viene da "sinistra" della vela (globalmente), la pancia è a "destra"
-                // Se (wind.angle - (this.angle + this.currentSailAngle)) normalizzato è tra 0 e PI, pancia a destra (negativo Y locale)
-                // Altrimenti pancia a sinistra (positivo Y locale)
-                let globalSailAngle = this.angle + this.currentSailAngle;
-                let windRelativeToGlobalSail = smallestAngleBetween(wind.angle, globalSailAngle);
-
-                if (windRelativeToGlobalSail > 0 && windRelativeToGlobalSail < PI) { // Vento da sinistra della vela
-                    sailDepthSign = 1; // Pancia "in basso" (Y positivo locale)
-                } else if (windRelativeToGlobalSail < 0 && windRelativeToGlobalSail > -PI) { // Vento da destra della vela
-                    sailDepthSign = -1; // Pancia "in alto" (Y negativo locale)
-                } else { // Vento perfettamente da prua o poppa della vela
-                    // In questo caso la pancia potrebbe essere minima o ambigua, usiamo il default
-                    sailDepthSign = (this.currentSailAngle >=0 ) ? -1 : 1; // Semplice fallback
+                let globalSailReferenceAngle = this.angle + this.currentSailAngle; // Direzione in cui punta il boma
+                let windAngleRelativeToSailAxis = smallestAngleBetween(wind.angle, globalSailReferenceAngle);
+                // Se windAngleRelativeToSailAxis è tra 0 e PI (esclusi), il vento viene da "sinistra" del boma (guardando dall'albero). La pancia va a "destra" (Y negativo locale).
+                // Se windAngleRelativeToSailAxis è tra 0 e -PI (esclusi), il vento viene da "destra" del boma. La pancia va a "sinistra" (Y positivo locale).
+                
+                let sailDepthSign = 0;
+                if (this.currentSailDepth > 0.1) { // Solo se c'è un po' di pancia
+                    if (windAngleRelativeToSailAxis > 0.05 && windAngleRelativeToSailAxis < PI - 0.05) { // Vento da sinistra (es. mure a dritta)
+                        sailDepthSign = -1; // Pancia verso Y negativo (visivamente "in alto" se la vela è orizzontale a dx)
+                    } else if (windAngleRelativeToSailAxis < -0.05 && windAngleRelativeToSailAxis > -PI + 0.05) { // Vento da destra (es. mure a sinistra)
+                        sailDepthSign = 1;  // Pancia verso Y positivo (visivamente "in basso")
+                    } else { // Vento quasi allineato, pancia minima o ambigua
+                        sailDepthSign = (this.currentSailAngle > 0) ? -1 : 1; // Fallback basato sull'angolo relativo
+                    }
                 }
 
 
-                let luffControlX = this.sailBoomLength * 0.15; // Punto di controllo per l'inferitura (luff)
-                let luffControlY = mastTopY * 0.6 + sailDepthSign * this.currentSailDepth * 0.3; // Curva verso la pancia
-                
-                let leechControlX = this.sailBoomLength * 0.75; // Punto di controllo per la balumina (leech)
-                let leechControlY = mastTopY * 0.4 + sailDepthSign * this.currentSailDepth * 0.6;
+                // Punti della vela
+                let p1 = createVector(mastBaseX, mastTopY); // Top albero
+                let p2 = createVector(mastBaseX, mastBaseY); // Base albero/boma
+                let p3 = createVector(boomEndX, boomEndY); // Fine boma (bugna)
 
-                let footControlX = this.sailBoomLength * 0.5;   // Punto di controllo per la base (foot)
-                let footControlY = sailDepthSign * this.currentSailDepth; // Massima pancia qui
+                // Punti di controllo per le curve
+                // Inferitura (da p1 a p2) - leggermente curvata verso il boma
+                let luffCtrlX = mastBaseX + this.currentSailDepth * 0.2 * sailDepthSign; // Piccola curva verso l'interno
+                let luffCtrlY = lerp(p1.y, p2.y, 0.5);
+
+                // Base/Balumina (da p2 a p3 a p1) - questa è la parte che forma l'arco principale
+                // Punto medio del segmento p2-p3 (linea del boma)
+                let midFootX = lerp(p2.x, p3.x, 0.5);
+                let midFootY = lerp(p2.y, p3.y, 0.5) + this.currentSailDepth * sailDepthSign; // Punto di massima pancia sulla base
+
+                // Punto medio del segmento p3-p1 (linea immaginaria bugna-top albero)
+                let midLeechCtrlX = lerp(p3.x, p1.x, 0.5) + this.currentSailDepth * 0.7 * sailDepthSign; // Punto di controllo per la balumina
+                let midLeechCtrlY = lerp(p3.y, p1.y, 0.5) + this.currentSailDepth * 0.7 * sailDepthSign; // Anche Y influenzato
 
                 beginShape();
-                // Inferitura (Luff - dal top dell'albero alla base del boma)
-                vertex(0, mastTopY); // Top albero
-                quadraticVertex(luffControlX, luffControlY, 0, mastBaseY); // Curva verso la base del boma
+                vertex(p1.x, p1.y); // Top albero
+                // Inferitura (luff) - da top albero a base boma
+                quadraticVertex(luffCtrlX, luffCtrlY, p2.x, p2.y);
+                
+                // Da base boma, attraverso la pancia, fino alla bugna (p3), poi curva verso top albero (p1)
+                // Useremo una Bezier cubica per più controllo sull'arco da p2 a p3 e poi a p1
+                // Punti di controllo per p2 -> p3 (base con pancia)
+                let cp1_foot_x = lerp(p2.x, midFootX, 0.5);
+                let cp1_foot_y = lerp(p2.y, midFootY, 0.25); // Più vicino a p2
+                let cp2_foot_x = lerp(midFootX, p3.x, 0.5);
+                let cp2_foot_y = lerp(midFootY, p3.y, 0.75); // Più vicino a p3
+                bezierVertex(cp1_foot_x, cp1_foot_y, cp2_foot_x, cp2_foot_y, p3.x, p3.y); // Curva fino alla bugna
 
-                // Base (Foot - lungo il boma, con pancia)
-                // vertex(0, mastBaseY); // Già qui dal luff
-                quadraticVertex(footControlX, footControlY, boomEndX, boomEndY); // Curva fino alla bugna
-
-                // Balumina (Leech - dalla bugna al top dell'albero)
-                // vertex(boomEndX, boomEndY); // Già qui dal foot
-                quadraticVertex(leechControlX, leechControlY, 0, mastTopY); // Curva fino al top albero
+                // Punti di controllo per p3 -> p1 (balumina)
+                let cp1_leech_x = lerp(p3.x, midLeechCtrlX, 0.6); // Controllo più verso la bugna
+                let cp1_leech_y = lerp(p3.y, midLeechCtrlY, 0.4);
+                let cp2_leech_x = lerp(midLeechCtrlX, p1.x, 0.4); // Controllo più verso il top
+                let cp2_leech_y = lerp(midLeechCtrlY, p1.y, 0.6);
+                bezierVertex(cp1_leech_x, cp1_leech_y, cp2_leech_x, cp2_leech_y, p1.x, p1.y); // Curva fino al top albero
+                
                 endShape(CLOSE);
 
-                // Disegna il boma sopra la vela per chiarezza
+                // Boma disegnato sopra
                 stroke(70, 70, 80); strokeWeight(5); noFill();
-                beginShape();
-                vertex(0,0); // Attacco albero
-                // Punto di controllo per la curva del boma (leggermente curvo)
-                quadraticVertex(this.sailBoomLength * 0.6, sailDepthSign * this.currentSailDepth * 0.1, this.sailBoomLength, 0);
-                endShape();
-                // --- FINE NUOVO DISEGNO VELA ---
+                line(mastBaseX, mastBaseY, boomEndX, boomEndY); // Boma dritto per ora, la vela si curva attorno
+                // --- FINE DISEGNO VELA AD ARCO ---
                 
-                pop(); // Fine trasformazioni windsurf
+                pop();
             }
             getSpeed() { return this.vel.mag(); }
         }
-
+        
         // --- CLASSE ISOLA ---
         class Island { 
             constructor(x, y, size, seed) {
