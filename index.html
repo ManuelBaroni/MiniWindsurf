@@ -2,27 +2,56 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Windsurf Adventure Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover"> {/* Aggiunto viewport-fit=cover */}
+    <title>Windsurf Adventure Fullscreen</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #000033; }
-        canvas { border: 1px solid #555; }
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            background-color: #000033; /* Sfondo per aree fuori dal canvas, se ci sono */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            display: block; /* Rimuove eventuale spazio extra sotto il canvas */
+            /* Le dimensioni del canvas saranno gestite da p5.js con windowWidth/Height */
+        }
         #controlsInfo {
             position: absolute;
             bottom: 10px;
             left: 10px;
             color: white;
             font-family: Arial, sans-serif;
-            font-size: 12px;
-            background-color: rgba(0,0,0,0.5);
+            /* fontSize e padding gestiti da JS ora */
+            background-color: rgba(0,0,0,0.65); /* Più scuro per leggibilità */
             padding: 5px;
             border-radius: 3px;
             z-index: 100;
+            max-width: calc(100% - 20px); /* Evita che esca orizzontalmente */
+            box-sizing: border-box;
+        }
+        #fullscreenButton {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 8px 12px;
+            font-size: 14px;
+            background-color: rgba(255,255,255,0.3);
+            border: 1px solid rgba(255,255,255,0.5);
+            color: white;
+            cursor: pointer;
+            border-radius: 5px;
+            z-index: 101; /* Sopra controlsInfo */
         }
     </style>
 </head>
 <body>
+    <button id="fullscreenButton">Fullscreen</button> {/* Bottone per attivare Fullscreen */}
     <div id="controlsInfo"></div>
     <script>
         // --- CONFIGURAZIONI ---
@@ -38,6 +67,7 @@
         let islands = [];
         let camera;
         let P5_TWO_PI;
+        let fullscreenBtn;
 
         let touchState = {
             steer: { active: false, startX: 0, id: -1 },
@@ -354,11 +384,18 @@
             return collision;
         }
 
-        // --- P5.JS SETUP ---
-        function setup() { /* ... identico a prima, tranne per le isole e particelle già modificato ... */
-            let canvas = createCanvas(windowWidth * 0.98, windowHeight * 0.98);
-            canvas.parent(document.body); pixelDensity(1);
-            P5_TWO_PI = TWO_PI; if (typeof P5_TWO_PI === 'undefined') P5_TWO_PI = 2 * Math.PI;
+       function setup() {
+            // createCanvas(windowWidth, windowHeight); // Usa dimensioni intere della finestra
+            // Nota: potresti voler mantenere windowWidth * 0.98 se il bordo era desiderato.
+            // Per il vero fullscreen, windowWidth e windowHeight sono meglio.
+            let canvas = createCanvas(windowWidth, windowHeight);
+            canvas.parent(document.body); // Assicurati che sia figlio diretto del body
+            pixelDensity(1);
+            
+            P5_TWO_PI = TWO_PI;
+            if (typeof P5_TWO_PI === 'undefined') P5_TWO_PI = 2 * Math.PI;
+
+            // ... (resto del tuo setup: inizializzazione wind, windsurf, camera, isole, ecc.)
             wind = { angle: random(P5_TWO_PI), strength: 1.5, targetAngle: random(P5_TWO_PI), targetStrength: 1.5, variability: 0.001, strengthVariability: 0.0005 };
             windsurf = new Windsurf(WORLD_WIDTH / 2, WORLD_HEIGHT / 2);
             camera = new Camera(windsurf.pos.x - width/2, windsurf.pos.y - height/2); camera.follow(windsurf);
@@ -369,9 +406,75 @@
                 if (dist(islandX, islandY, windsurf.pos.x, windsurf.pos.y) > max(islandSize, 300) + 300) { islands.push(new Island(islandX, islandY, islandSize, i * 123.456)); } else { i--; }
             }
             for (let i = 0; i < NUM_OCEAN_PARTICLES; i++) { oceanParticles.push({ x: random(WORLD_WIDTH), y: random(WORLD_HEIGHT), size: random(0.5, 2.5), opacity: random(15, 50), speedFactor: random(0.05, 0.25) }); }
-            updateWind(); updateControlsInfo();
+            // Fine inizializzazioni da setup
+
+
+            updateWind();
+            updateControlsInfo();
+
+            // Gestione bottone Fullscreen
+            fullscreenBtn = document.getElementById('fullscreenButton');
+            if (fullscreenBtn) {
+                fullscreenBtn.addEventListener('click', toggleFullScreen);
+                // Nascondi il bottone se l'API Fullscreen non è supportata
+                if (!document.fullscreenEnabled && !document.webkitFullscreenEnabled && !document.mozFullScreenEnabled && !document.msFullscreenEnabled) {
+                    fullscreenBtn.style.display = 'none';
+                }
+            }
+             // Aggiusta subito il canvas se la finestra viene ridimensionata (es. rotazione smartphone)
+            windowResized();
+        }
+ function toggleFullScreen() {
+            let elem = document.documentElement; // Richiedi fullscreen per l'intera pagina
+            if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen();
+                } else if (elem.webkitRequestFullscreen) { /* Safari */
+                    elem.webkitRequestFullscreen();
+                } else if (elem.mozRequestFullScreen) { /* Firefox */
+                    elem.mozRequestFullScreen();
+                } else if (elem.msRequestFullscreen) { /* IE/Edge */
+                    elem.msRequestFullscreen();
+                }
+                if(fullscreenBtn) fullscreenBtn.textContent = "Exit Fullscreen";
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) { /* Safari */
+                    document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) { /* Firefox */
+                    document.mozCancelFullScreen();
+                } else if (document.msExitFullscreen) { /* IE/Edge */
+                    document.msExitFullscreen();
+                }
+                if(fullscreenBtn) fullscreenBtn.textContent = "Fullscreen";
+            }
+        }
+        
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight); // Riempi sempre la finestra
+            updateControlsInfo(); // Aggiorna info controlli (che ora usa isSmallScreen)
+            if (camera) {
+                 camera.pos.x = constrain(camera.pos.x, 0, WORLD_WIDTH - width);
+                 camera.pos.y = constrain(camera.pos.y, 0, WORLD_HEIGHT - height);
+            }
+            // Potrebbe essere necessario ri-calcolare/ri-posizionare elementi HUD specifici qui
+            // se il loro layout dipende dalle dimensioni finali del canvas.
+            // Ma con il dimensionamento relativo nelle funzioni draw dell'HUD, dovrebbe già adattarsi.
         }
 
+        // Aggiungi un listener per l'evento di cambio fullscreen per aggiornare il testo del bottone
+        document.addEventListener('fullscreenchange', () => {
+            if(fullscreenBtn){
+                fullscreenBtn.textContent = document.fullscreenElement ? "Exit Fullscreen" : "Fullscreen";
+            }
+        });
+        document.addEventListener('webkitfullscreenchange', () => { /* Safari */
+             if(fullscreenBtn){
+                fullscreenBtn.textContent = document.webkitFullscreenElement ? "Exit Fullscreen" : "Fullscreen";
+            }
+        });
+        
         // --- P5.JS DRAW LOOP ---
         function draw() { /* ... identico a prima ... */
             if (!wind || !windsurf) { background(0); fill(255); textSize(20); textAlign(CENTER,CENTER); text("Loading...", width/2, height/2); return; }
@@ -414,128 +517,124 @@
                 } endShape(); }
         }
               // --- FUNZIONI HUD RIVISTE PER MIGLIORE RESPONSIVITÀ ---
+        // --- FUNZIONI HUD RIVISTE PER MIGLIORE LEGGIBILITÀ SMARTPHONE (Iterazione 3) ---
 
         function drawWindIndicator() {
-            let R = min(width, height) * 0.045; // Raggio relativo
-            let margin = min(width, height) * 0.03;
+            const isSmallScreen = min(width, height) < 600; // Soglia per "schermo piccolo"
+            let R = min(width, height) * (isSmallScreen ? 0.065 : 0.045); // Più grande su schermi piccoli
+            let margin = min(width, height) * (isSmallScreen ? 0.04 : 0.025);
             let cx = width - R - margin;
             let cy = R + margin;
 
             push();
             translate(cx, cy);
-            fill(255, 255, 255, 70); noStroke(); ellipse(0,0, R*2, R*2);
-            stroke(255,255,255,100); strokeWeight(max(1, R*0.02)); // Stroke weight relativo
+            fill(255, 255, 255, 90); noStroke(); ellipse(0,0, R*2, R*2); // Più opaco
+            stroke(255,255,255,120); strokeWeight(max(1.2, R*0.025));
             for(let a=0; a<P5_TWO_PI; a+=P5_TWO_PI/16) line(0,0, cos(a)*R, sin(a)*R);
             line(0,-R,0,R); line(-R,0,R,0);
 
             rotate(wind.angle);
-            let arrowLen = R * 0.8 + wind.strength * (R * 0.08); // Lunghezza freccia relativa
-            stroke(255,50,50); strokeWeight(max(1.5, R*0.07 + wind.strength * 0.5)); line(0,0, arrowLen,0);
+            let arrowLen = R * 0.8 + wind.strength * (R * 0.08);
+            stroke(255,50,50); strokeWeight(max(2, R*0.08 + wind.strength * 0.6)); line(0,0, arrowLen,0);
             fill(255,50,50); noStroke();
-            triangle(arrowLen,0, arrowLen-R*0.2,-R*0.1, arrowLen-R*0.2,R*0.1); // Triangolo relativo
+            triangle(arrowLen,0, arrowLen-R*0.25,-R*0.12, arrowLen-R*0.25,R*0.12); // Triangolo più grande
             pop();
 
-            fill(255); textSize(max(9, R*0.3)); textAlign(CENTER,CENTER);
-            text(wind.strength.toFixed(1) + " kn", cx, cy + R + margin*0.3);
-            text("VENTO", cx, cy - R - margin*0.3);
+            fill(255); textSize(max(10, R*0.35)); textAlign(CENTER,CENTER); // Testo più grande
+            text(wind.strength.toFixed(1) + " kn", cx, cy + R + margin*0.6);
+            text("VENTO", cx, cy - R - margin*0.6);
         }
 
         function drawSpeedometer() {
-            let R = min(width, height) * 0.055; // Raggio relativo
-            let margin = min(width, height) * 0.03;
+            const isSmallScreen = min(width, height) < 600;
+            let R = min(width, height) * (isSmallScreen ? 0.075 : 0.055); // Più grande
+            let margin = min(width, height) * (isSmallScreen ? 0.04 : 0.025);
             let cx = R + margin;
             let cy = height - R - margin;
 
             push();
             translate(cx, cy);
-            noFill(); stroke(255,255,255,100); strokeWeight(max(3, R*0.2));
+            noFill(); stroke(255,255,255,120); strokeWeight(max(4, R*0.22));
             arc(0,0, R*2, R*2, P5_TWO_PI * 0.375, P5_TWO_PI * 0.125);
             let speed = windsurf.getSpeed();
             let speedAngle = map(speed, 0, windsurf.maxSpeed, P5_TWO_PI * 0.375, P5_TWO_PI * 0.125);
-            stroke(100,200,255); strokeWeight(max(2.5, R*0.15));
+            stroke(120,220,255); strokeWeight(max(3, R*0.18)); // Colore più brillante
             arc(0,0, R*2, R*2, P5_TWO_PI * 0.375, speedAngle);
             rotate(speedAngle);
-            stroke(255); strokeWeight(max(1, R*0.05)); line(0,0,R*0.9,0);
+            stroke(255); strokeWeight(max(1.5, R*0.06)); line(0,0,R*0.9,0);
             pop();
 
-            fill(255); textSize(max(10, R*0.35)); textAlign(CENTER,CENTER);
+            fill(255); textSize(max(12, R*0.4)); textAlign(CENTER,CENTER);
             text(speed.toFixed(1), cx, cy);
-            textSize(max(8, R*0.25)); text("m/s", cx, cy + R*0.5 + margin*0.2);
+            textSize(max(9, R*0.28)); text("m/s", cx, cy + R*0.5 + margin*0.4);
         }
 
         function drawSailAngleIndicator() {
-            let R = min(width, height) * 0.04; // Raggio relativo
-            let margin = min(width, height) * 0.03;
-            let cx = width - R - margin;
-            let cy = height - R - margin; // Sotto il tachimetro
+            const isSmallScreen = min(width, height) < 600;
+            let ROuterSpeedo = min(width, height) * (isSmallScreen ? 0.075 : 0.055);
+            let marginSpeedo = min(width, height) * (isSmallScreen ? 0.04 : 0.025);
+            let speedoTopY = height - ROuterSpeedo - marginSpeedo - ROuterSpeedo;
+
+            let R = min(width, height) * (isSmallScreen ? 0.055 : 0.04); // Più grande
+            let margin = min(width, height) * (isSmallScreen ? 0.03 : 0.020);
+            let cx = ROuterSpeedo + marginSpeedo;
+            let cy = speedoTopY - R - margin;
 
             push();
             translate(cx, cy);
-            fill(200,170,110,100); noStroke();
-            rect(-R*0.15, -R*0.8, R*0.3, R*1.6, R*0.1); // Tavola stilizzata relativa
+            fill(200,170,110,120); noStroke(); // Più opaco
+            rect(-R*0.2, -R*0.8, R*0.4, R*1.6, R*0.12); // Tavola un po' più spessa
 
-            rotate(windsurf.sailAngle);
-            fill(230,230,250,150); stroke(50); strokeWeight(max(1, R*0.04));
-            beginShape();
-            vertex(0,0); vertex(R*1.2, R*0.2); vertex(R*1.1, -R*0.2);
-            endShape(CLOSE);
+            rotate(windsurf.currentSailAngle);
+            fill(230,230,250,180); stroke(50); strokeWeight(max(1.2, R*0.05)); // Più opaco
+            beginShape(); vertex(0,0); vertex(R*1.2, R*0.2); vertex(R*1.1, -R*0.2); endShape(CLOSE);
             pop();
 
-            fill(255); textSize(max(8, R*0.25)); textAlign(CENTER,CENTER);
-            text("VELA", cx, cy + R + margin*0.3);
+            fill(255); textSize(max(9, R*0.28)); textAlign(CENTER,CENTER);
+            text("VELA", cx, cy + R + margin*0.6);
         }
 
         function drawMiniMap() {
-            let mapSize = min(width, height) * 0.15; // Dimensione mappa relativa
-            let margin = min(width, height) * 0.03;
-            // Posizionamento: sotto l'indicatore del vento e a destra dell'indicatore della vela
-            // per evitare sovrapposizioni, se possibile. O in un angolo diverso.
-            // Prova in alto a sinistra, sotto il tachimetro
-            let mapX = margin; //min(width, height) * 0.03 + min(width, height) * 0.055 * 2 + min(width, height) * 0.03; // A destra del tachimetro
-            let mapY = height - mapSize - margin;
+            const isSmallScreen = min(width, height) < 600;
+            let mapSize = min(width, height) * (isSmallScreen ? 0.22 : 0.16); // Più grande su schermi piccoli
+            let margin = min(width, height) * (isSmallScreen ? 0.035 : 0.025);
             
-            // O in alto a destra sotto l'indicatore del vento
-            // let mapX = width - mapSize - margin;
-            // let mapY = min(width, height) * 0.03 + min(width, height) * 0.045 * 2 + min(width, height) * 0.03;
+            let mapX, mapY;
 
-            // Proviamo in basso a destra, ma assicurandoci che non si sovrapponga all'indicatore della vela
-            let sailIndicatorBottomY = height - (min(width, height) * 0.04) - (min(width, height) * 0.03) + (min(width, height) * 0.04) + (min(width, height) * 0.03 * 0.3); // Stima Y inferiore indicatore vela
-            mapY = height - mapSize - margin;
-            mapX = width - mapSize - margin;
-            
-            // Se troppo affollato in basso a destra, spostalo in alto a sinistra
-             if (width < 450 || height < 450) { // Soglia per schermi piccoli
-                 mapX = margin;
-                 mapY = margin + (min(width, height) * 0.045 * 2) + (min(width, height) * 0.03 * 2); // Sotto indicatore vento
-                 // Assicurati che non si sovrapponga al tachimetro
-                 let speedoRightX = (min(width, height) * 0.055 + margin) + min(width, height) * 0.055;
-                 if (mapX + mapSize > speedoRightX && mapY < (height - margin)) { // Se c'è rischio di sovrapposizione
-                     // Potrebbe essere necessario un layout più complesso o sacrificare un elemento su schermi molto piccoli
-                 }
-             }
+            if (isSmallScreen) {
+                // Su schermi piccoli, mettila in alto a sinistra, sotto l'indicatore del vento se c'è spazio,
+                // altrimenti proprio nell'angolo.
+                let windIndicatorRadius = min(width, height) * 0.065;
+                let windIndicatorMargin = min(width, height) * 0.04;
+                let windIndicatorBottom = windIndicatorRadius * 2 + windIndicatorMargin * 2;
+                
+                mapX = margin;
+                mapY = windIndicatorBottom + margin; // Sotto indicatore vento
+                if (mapY + mapSize > height - margin) { // Se non ci sta sotto
+                    mapY = margin; // Mettila proprio in alto
+                }
+
+            } else {
+                // Su schermi più grandi, in basso a destra
+                mapX = width - mapSize - margin;
+                mapY = height - mapSize - margin;
+            }
 
 
             let sX = mapSize / WORLD_WIDTH; let sY = mapSize / WORLD_HEIGHT;
 
             push();
             translate(mapX, mapY);
-            fill(0, 40, 90, 130); noStroke(); rect(0,0, mapSize, mapSize, max(2, mapSize*0.03)); // Angoli arrotondati relativi
-            
-            // Isole
+            fill(0, 40, 90, 150); noStroke(); rect(0,0, mapSize, mapSize, max(3, mapSize*0.04)); // Più opaco
             for (let island of islands) {
-                fill(island.color);
-                beginShape();
-                for (let v of island.polygons[0]) vertex(v.x * sX, v.y * sY);
-                endShape(CLOSE);
+                fill(island.color); beginShape();
+                for (let v of island.polygons[0]) vertex(v.x * sX, v.y * sY); endShape(CLOSE);
             }
-            // Windsurf
-            fill(255,0,0); ellipse(windsurf.pos.x*sX, windsurf.pos.y*sY, max(2, mapSize*0.015), max(2, mapSize*0.015));
-            // Viewport Camera
-            noFill(); stroke(255,255,255,80); strokeWeight(max(1, mapSize*0.005));
+            fill(255,0,0); ellipse(windsurf.pos.x*sX, windsurf.pos.y*sY, max(2.5, mapSize*0.02), max(2.5, mapSize*0.02)); // Puntino più grande
+            noFill(); stroke(255,255,255,100); strokeWeight(max(1.2, mapSize*0.006)); // Viewport più visibile
             rect(camera.pos.x*sX, camera.pos.y*sY, width*sX, height*sY);
             pop();
         }
-
         function updateControlsInfo() {
             let info = "<b>Controlli Tastiera:</b><br>";
             info += "FRECCE Sx/Dx: Vira Tavola<br>";
