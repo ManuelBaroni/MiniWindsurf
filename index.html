@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Windsurf Adventure Fullscreen Corrected</title>
+    <title>Windsurf Adventure Corrected</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
     <style>
         html, body {
@@ -56,7 +56,7 @@
         const WORLD_WIDTH = 12000;
         const WORLD_HEIGHT = 9000;
         const NUM_OCEAN_PARTICLES = 400;
-        const SHOW_DEBUG_INFO = false;
+        const SHOW_DEBUG_INFO = false; // Imposta su true per vedere info di debug
 
         // --- VARIABILI GLOBALI ---
         let windsurf;
@@ -69,7 +69,7 @@
 
         let touchState = {
             steer: { active: false, startX: 0, id: -1 },
-            efficiency: { active: false, startY: 0, id: -1 } // Per controllo efficienza vela
+            efficiency: { active: false, startY: 0, id: -1 }
         };
 
         // --- CLASSE CAMERA ---
@@ -93,24 +93,25 @@
             }
             apply() { translate(-this.pos.x, -this.pos.y); }
         }
-                // --- CLASSE WINDSURF (LOGICA POSIZIONAMENTO VELA E CONTROVENTO MIGLIORATA) ---
+        
+        // --- CLASSE WINDSURF (CON VELA FLUIDA E LOGICA POSIZIONAMENTO MIGLIORATA) ---
         class Windsurf {
             constructor(x, y) {
                 this.pos = createVector(x, y);
                 this.vel = createVector(0, 0);
                 this.angle = -P5_TWO_PI / 4; // Angolo della tavola
 
-                this.currentSailAngle = 0;    // Angolo RELATIVO della "base" vela rispetto alla tavola
+                this.currentSailAngle = 0;    // Angolo RELATIVO attuale della "base" vela rispetto alla tavola
                 this.targetSailAngle = 0;
-                this.sailRotationSpeed = P5_TWO_PI * 0.45; 
+                this.sailRotationSpeed = P5_TWO_PI * 0.45; // Più reattiva
 
                 this.boardWidth = 22;
                 this.boardLength = 80;
-                this.sailBaseLength = 60; 
-                this.maxSailArchDepth = this.sailBaseLength * 0.35; 
-                this.currentSailArchDepth = 0;
+                this.sailBaseLength = 60; // Lunghezza del "boma" o base della vela
+                this.maxSailArchDepth = this.sailBaseLength * 0.35; // Massima "pancia"
+                this.currentSailArchDepth = 0; // "Pancia" attuale, per animazione
 
-                this.mastAttachmentPointX = -this.boardLength * 0.10;
+                this.mastAttachmentPointX = -this.boardLength * 0.10; // Punto di attacco vela sulla tavola
 
                 this.maxSpeed = 7;
                 this.turnRate = 0.04;
@@ -119,142 +120,75 @@
                 this.baseAccelerationFactor = 0.08;
                 this.isColliding = false;
 
-                this.sailEfficiencyModifier = 0;
+                this.sailEfficiencyModifier = 0; // Da -1 (meno efficiente) a +1 (più efficiente)
                 this.sailEfficiencyChangeRate = 0.03;
             }
 
-            handleInput() { /* ... identico alla versione precedente ... */ }
-            turn(direction, dt) { /* ... identico ... */ }
+            handleInput() {
+                let effectiveDeltaTime = deltaTime / 16.66;
+                if (keyIsDown(LEFT_ARROW)) this.turn(-1, effectiveDeltaTime);
+                if (keyIsDown(RIGHT_ARROW)) this.turn(1, effectiveDeltaTime);
 
-            // Questa funzione calcola la forza propulsiva data la configurazione
-            calculatePropulsionForRelativeSail(boardAngle, relativeSailAngle, currentWindAngle, currentWindStrength) {
-                let sailGlobalAngle = boardAngle + relativeSailAngle; // Angolo globale del "boma"
+                let efficiencyChangedByKeyboard = false;
+                if (keyIsDown(UP_ARROW) || keyIsDown(87)) { // W
+                    this.sailEfficiencyModifier += this.sailEfficiencyChangeRate * effectiveDeltaTime;
+                    efficiencyChangedByKeyboard = true;
+                } else if (keyIsDown(DOWN_ARROW) || keyIsDown(83)) { // S
+                    this.sailEfficiencyModifier -= this.sailEfficiencyChangeRate * effectiveDeltaTime;
+                    efficiencyChangedByKeyboard = true;
+                }
                 
-                // Angolo tra il vento e la NORMALE della vela.
-                // La normale è dove la vela "cattura" meglio il vento, perpendicolare al boma.
+                // Se l'efficienza non è controllata attivamente dal touch né dalla tastiera, falla tornare a 0
+                if (!touchState.efficiency.active && !efficiencyChangedByKeyboard) {
+                    if (abs(this.sailEfficiencyModifier) > 0.015) { // Soglia leggermente più alta per evitare micro-aggiustamenti
+                        this.sailEfficiencyModifier -= Math.sign(this.sailEfficiencyModifier) * this.sailEfficiencyChangeRate * 0.7 * effectiveDeltaTime; // Ritorno più veloce
+                    } else {
+                        this.sailEfficiencyModifier = 0;
+                    }
+                }
+                this.sailEfficiencyModifier = constrain(this.sailEfficiencyModifier, -1, 1);
+            }
+
+            turn(direction, dt) { this.angle += this.turnRate * direction * dt; }
+
+            calculatePropulsionForRelativeSail(boardAngle, relativeSailAngle, currentWindAngle, currentWindStrength) {
+                let sailGlobalAngle = boardAngle + relativeSailAngle;
                 let windToSailNormalAngle = smallestAngleBetween(currentWindAngle, sailGlobalAngle + P5_TWO_PI / 4);
                 let forceMagnitudeOnSail = currentWindStrength * cos(windToSailNormalAngle);
-                
-                // La forza propulsiva agisce lungo la direzione della tavola.
-                // La forza generata dalla vela è perpendicolare al boma.
                 let forceDirFromSail = sailGlobalAngle + P5_TWO_PI / 4;
                 let angleBetweenForceAndBoard = smallestAngleBetween(forceDirFromSail, boardAngle);
-                
                 let propulsion = forceMagnitudeOnSail * cos(angleBetweenForceAndBoard);
                 return propulsion;
             }
             
-            // Questa è la funzione chiave per il posizionamento della vela
             calculateOptimalRelativeSailAngle(boardAngle, currentWindAngle, currentWindStrength) {
                 let windAngleRelativeToBoard = smallestAngleBetween(currentWindAngle, boardAngle);
-                // windAngleRelativeToBoard:
-                // 0: vento da prua
-                // PI/2: vento da dritta (90 gradi a destra della prua)
-                // PI: vento da poppa
-                // -PI/2: vento da sinistra (90 gradi a sinistra della prua)
-
                 let optimalRelativeSailAngle = 0;
+                const deadZoneAngle = P5_TWO_PI * 0.12; // ~43 gradi
 
-                // 1. Caso: Prua al vento (o quasi) - "Zona Morta"
-                const deadZoneAngle = P5_TWO_PI * 0.12; // ~43 gradi (2 * 0.12 * 180/PI)
-                if (abs(windAngleRelativeToBoard) < deadZoneAngle) {
-                    // Vela "in bandiera", allineata con il vento, ma relativa alla tavola.
-                    // L'idea è che la vela si allinei con il vento, quindi il suo angolo globale
-                    // dovrebbe essere wind.angle.
-                    // sailGlobal = boardAngle + optimalRelativeSailAngle
-                    // optimalRelativeSailAngle = wind.angle - boardAngle
-                    optimalRelativeSailAngle = smallestAngleBetween(currentWindAngle, boardAngle);
-                    // E dovrebbe essere "dietro" l'albero (punto di attacco).
-                    // Se wind.angle - boardAngle è piccolo, la vela è quasi parallela alla tavola.
-                    // Per farla andare "dietro", la forziamo verso angoli grandi (vicino a PI o -PI relativo)
-                    // ma questo non è corretto per il luffing.
-                    // Nel luffing, la vela si allinea semplicemente con il vento.
-                    // L'angolo relativo sarà quindi l'opposto dell'angolo del vento relativo alla tavola.
-                    optimalRelativeSailAngle = -windAngleRelativeToBoard; // La vela si allinea con il vento
-                    // Se il vento è da prua (windAngleRelBoard ~ 0), optimalRelSail ~ 0 (vela al centro)
-                    // Se il vento è leggermente da dx (windAngleRelBoard ~ +0.1), optimalRelSail ~ -0.1 (vela leggermente a dx)
-                    // Questo la fa sbattere. Per la grafica "dietro", la faremo ruotare di PI.
-                    // Ma per la fisica, questo è più corretto per il luffing.
-                    // Per la visualizzazione "dietro" come nell'immagine "Prua al vento",
-                    // si potrebbe forzare l'angolo a 0 e la pancia a 0 o negativa.
-                    // Per ora, ci concentriamo sull'angolo che genera meno forza.
-                }
-                // 2. Caso: Poppa (vento da dietro)
-                else if (abs(abs(windAngleRelativeToBoard) - PI) < P5_TWO_PI * 0.20) { // ~72 gradi di settore di poppa
-                    // Vento da poppa: vela perpendicolare alla tavola.
-                    // Se il vento è da dritta della poppa (windAngleRelBoard > PI/2 e < 3PI/2, cioè positivo e grande)
-                    // allora la vela dovrebbe stare a sinistra (+PI/2).
-                    // Se il vento è da sinistra della poppa (windAngleRelBoard < -PI/2 e > -3PI/2, cioè negativo e grande)
-                    // allora la vela dovrebbe stare a dritta (-PI/2).
-                    // Questa logica è un po' contorta. Più semplice:
-                    if (windAngleRelativeToBoard > 0) { // Vento viene da dritta (rispetto alla prua) o dritta-poppa
-                        optimalRelativeSailAngle = P5_TWO_PI / 4;  // Vela a sinistra (+90 gradi)
-                    } else { // Vento viene da sinistra (rispetto alla prua) o sinistra-poppa
-                        optimalRelativeSailAngle = -P5_TWO_PI / 4; // Vela a dritta (-90 gradi)
-                    }
-                }
-                // 3. Casi Intermedi (Bolina, Traverso, Lasco)
-                else {
-                    // Logica di ottimizzazione generale: trova l'angolo che massimizza la propulsione.
-                    // Questa logica dovrebbe già tendere a mettere la vela sul lato corretto.
+                if (abs(windAngleRelativeToBoard) < deadZoneAngle) { // Controvento
+                    optimalRelativeSailAngle = -windAngleRelativeToBoard * 0.8; // Tende ad allinearsi, sbattendo
+                } else { // Altre andature
                     let bestAngleFound = 0;
                     let maxPropulsion = -Infinity;
-                    // Limitiamo il test degli angoli a un range più realistico per le andature portanti
-                    // o cerchiamo su tutto il range e poi lo aggiustiamo?
-                    // L'immagine suggerisce che la vela non supera mai i +/- 90 gradi relativi.
-                    
-                    // Mure a dritta: vento da dritta (0 < windAngleRelBoard < PI). Vela va a sinistra (optimalRelSail > 0).
-                    // Mure a sinistra: vento da sinistra (0 > windAngleRelBoard > -PI). Vela va a dritta (optimalRelSail < 0).
+                    let step = P5_TWO_PI / 72; // ~5 gradi
 
-                    let searchStart = 0;
-                    let searchEnd = 0;
-                    let searchStep = P5_TWO_PI / 72; // ~5 gradi
-
-                    if (windAngleRelativeToBoard > 0) { // Vento da dritta, la vela dovrebbe andare a sinistra
-                        searchStart = 0.05; // Evita 0
-                        searchEnd = P5_TWO_PI / 4 + 0.1; // Poco oltre 90 gradi a sinistra
-                    } else { // Vento da sinistra, la vela dovrebbe andare a dritta
-                        searchStart = -P5_TWO_PI / 4 - 0.1; // Poco oltre 90 gradi a dritta
-                        searchEnd = -0.05; // Evita 0
+                    for (let testRelAngle = -P5_TWO_PI / 2 + 0.01; testRelAngle < P5_TWO_PI / 2 - 0.01; testRelAngle += step) {
+                        let prop = this.calculatePropulsionForRelativeSail(boardAngle, testRelAngle, currentWindAngle, currentWindStrength);
+                        if (prop > maxPropulsion) {
+                            maxPropulsion = prop;
+                            bestAngleFound = testRelAngle;
+                        }
                     }
-                    
-                    // Se l'iterazione precedente non trova una buona soluzione, potremmo dover ampliare
-                    // la ricerca o usare un approccio più analitico.
-                    // Per ora, la ricerca completa e poi la selezione del lato sembra più robusta.
-                    let tempBestAngle = 0;
-                    let tempMaxProp = -Infinity;
-
-                    for (let testRelAngle = -P5_TWO_PI / 2 + 0.01; testRelAngle < P5_TWO_PI / 2 - 0.01; testRelAngle += searchStep) {
-                         let prop = this.calculatePropulsionForRelativeSail(boardAngle, testRelAngle, currentWindAngle, currentWindStrength);
-                         if (prop > tempMaxProp) {
-                             tempMaxProp = prop;
-                             tempBestAngle = testRelAngle;
-                         }
-                    }
-                    optimalRelativeSailAngle = tempBestAngle;
-
-                    // Assicura che la vela sia sul lato corretto (sottovento rispetto alla tavola)
-                    // Questa è la parte più delicata per replicare l'immagine.
-                    // Se vento da dritta (windAngleRel > 0), vela a sinistra (optimalRel > 0)
-                    // Se vento da sinistra (windAngleRel < 0), vela a dritta (optimalRel < 0)
-                    if (windAngleRelativeToBoard > deadZoneAngle && optimalRelativeSailAngle < 0) {
-                        // Vento da dritta, ma l'ottimizzazione ha messo la vela a dritta. Errore.
-                        // Forse la vela dovrebbe essere specchiata o ricalcolata sull'altro lato.
-                        // Per ora, ci fidiamo che l'ottimizzazione trovi il lato corretto se il range è ampio.
-                        // La logica precedente (testare tutti gli angoli da -PI/2 a PI/2) è più probabile che funzioni.
-                    } else if (windAngleRelativeToBoard < -deadZoneAngle && optimalRelativeSailAngle > 0) {
-                        // Vento da sinistra, ma ottimizzazione ha messo vela a sinistra. Errore.
-                    }
+                    optimalRelativeSailAngle = bestAngleFound;
                 }
-                return constrain(optimalRelativeSailAngle, -P5_TWO_PI/2 * 0.98, P5_TWO_PI/2 * 0.98); // Limita a poco meno di +/- 90gradi
+                return constrain(optimalRelativeSailAngle, -P5_TWO_PI/2 * 0.98, P5_TWO_PI/2 * 0.98);
             }
-
 
             update() {
                 let effectiveDeltaTime = deltaTime / 16.66;
 
                 this.targetSailAngle = this.calculateOptimalRelativeSailAngle(this.angle, wind.angle, wind.strength);
-                // ... (interpolazione currentSailAngle verso targetSailAngle - IDENTICA)
                 let angleDiff = smallestAngleBetween(this.targetSailAngle, this.currentSailAngle);
                 let maxRotationThisFrame = this.sailRotationSpeed * (deltaTime / 1000); 
                 if (abs(angleDiff) <= maxRotationThisFrame) { this.currentSailAngle = this.targetSailAngle; }
@@ -262,35 +196,22 @@
                 this.currentSailAngle = (this.currentSailAngle % P5_TWO_PI + P5_TWO_PI) % P5_TWO_PI;
                 if (this.currentSailAngle > P5_TWO_PI / 2) this.currentSailAngle -= P5_TWO_PI;
 
-
-                // Calcolo della "pancia" dell'arco
                 let sailGlobalAngle = this.angle + this.currentSailAngle;
                 let windToSailAxisNormal = smallestAngleBetween(wind.angle, sailGlobalAngle + P5_TWO_PI / 4);
                 let pressureFactor = cos(windToSailAxisNormal); 
                 pressureFactor = max(0, pressureFactor);
-
-                // Caso speciale: prua al vento -> vela sgonfia o sbatte
                 let windAngleRelativeToBoard = smallestAngleBetween(wind.angle, this.angle);
                 const deadZoneAngle = P5_TWO_PI * 0.12;
                 if (abs(windAngleRelativeToBoard) < deadZoneAngle) {
-                    pressureFactor = 0.05; // Minima pancia, o sbatte (animazione futura)
+                    pressureFactor = 0.1 + sin(frameCount * 0.3 + this.pos.x * 0.01) * 0.05; // Leggero sbattimento
                 }
-
-                let targetSailArchDepth = this.maxSailArchDepth * pressureFactor * (wind.strength / 1.5);
+                let targetSailArchDepth = this.maxSailArchDepth * pressureFactor * (wind.strength / 1.5) * (1 + this.sailEfficiencyModifier * 0.5); // Efficienza influenza anche pancia
                 targetSailArchDepth = constrain(targetSailArchDepth, 0, this.maxSailArchDepth);
                 this.currentSailArchDepth += (targetSailArchDepth - this.currentSailArchDepth) * 0.20 * effectiveDeltaTime;
 
-
-                // Calcolo Propulsione
                 let rawSailPropulsion = this.calculatePropulsionForRelativeSail(this.angle, this.currentSailAngle, wind.angle, wind.strength);
-                
-                // Se prua al vento, la propulsione dovrebbe essere molto bassa o negativa
                 if (abs(windAngleRelativeToBoard) < deadZoneAngle) {
-                    rawSailPropulsion = min(0, rawSailPropulsion); // Non spingere avanti se controvento
-                    // Potremmo anche aggiungere una piccola forza all'indietro se la vela "prende al contrario"
-                    if (cos(windAngleRelativeToBoard) > 0.95) { // Vento quasi perfettamente da prua
-                        rawSailPropulsion -= 0.01 * wind.strength; // Piccola spinta indietro
-                    }
+                    rawSailPropulsion = min(0, rawSailPropulsion) - 0.005 * wind.strength * cos(windAngleRelativeToBoard); // Piccola resistenza controvento
                 }
 
                 let effectiveAccelerationFactor = this.baseAccelerationFactor * (1 + this.sailEfficiencyModifier);
@@ -300,7 +221,6 @@
                 let sailAcceleration = boardDirection.copy().mult(finalPropulsion * effectiveAccelerationFactor);
                 this.vel.add(p5.Vector.mult(sailAcceleration, effectiveDeltaTime));
 
-                // ... (resto di update: Attrito, Resistenza Laterale, ecc. IDENTICO) ...
                 let frictionForce = this.vel.copy().mult(-this.friction);
                 this.vel.add(p5.Vector.mult(frictionForce, effectiveDeltaTime));
                 let perpendicularToBoard = p5.Vector.fromAngle(this.angle + P5_TWO_PI / 4);
@@ -308,8 +228,7 @@
                 let lateralDragForce = perpendicularToBoard.copy().mult(-lateralVelocityComponent * this.lateralResistance);
                 this.vel.add(p5.Vector.mult(lateralDragForce, effectiveDeltaTime));
                 if (this.vel.mag() > this.maxSpeed) this.vel.setMag(this.maxSpeed);
-                 // Se quasi fermo e controvento, ferma del tutto
-                if (abs(windAngleRelativeToBoard) < deadZoneAngle && this.vel.mag() < 0.05) {
+                if (abs(windAngleRelativeToBoard) < deadZoneAngle && this.vel.mag() < 0.05 && this.sailEfficiencyModifier <= 0) {
                     this.vel.set(0,0);
                 }
                 if (!this.isColliding) { this.pos.add(p5.Vector.mult(this.vel, effectiveDeltaTime)); }
@@ -321,13 +240,38 @@
                 if (this.pos.y > WORLD_HEIGHT - this.boardLength / 2) { this.pos.y = WORLD_HEIGHT - this.boardLength / 2; this.vel.y *= -0.3; }
             }
 
-            checkCollision(island) { /* ... identico ... */ }
-                        draw() {
+            checkCollision(island) {
+                for (const polygon of island.polygons) {
+                    if (collidePointPoly(this.pos.x, this.pos.y, polygon)) {
+                        this.isColliding = true;
+                        let pushForce = createVector(0,0); let minDist = Infinity;
+                        for (let i = 0; i < polygon.length; i++) {
+                            let p1 = polygon[i]; let p2 = polygon[(i + 1) % polygon.length];
+                            let closestPt = getClosestPointOnSegment(this.pos, p1, p2);
+                            let distToSegment = p5.Vector.dist(this.pos, closestPt);
+                            if (distToSegment < minDist) {
+                                minDist = distToSegment;
+                                let segmentVec = p5.Vector.sub(p2, p1);
+                                let normal = createVector(-segmentVec.y, segmentVec.x).normalize();
+                                if (p5.Vector.dot(normal, p5.Vector.sub(this.pos, closestPt)) < 0) normal.mult(-1);
+                                pushForce = normal;
+                            }
+                        }
+                        if (minDist < this.boardWidth / 1.5) {
+                             this.pos.add(pushForce.mult((this.boardWidth / 1.5 - minDist) * 1.2));
+                             this.vel.mult(0.1);
+                        }
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
+            draw() {
                 push();
                 translate(this.pos.x, this.pos.y);
-                rotate(this.angle); // Ruota per la tavola
+                rotate(this.angle);
 
-                // Disegno scia
                 let speed = this.vel.mag();
                 if (speed > 0.3) {
                     stroke(255, 255, 255, map(speed, 0.3, this.maxSpeed, 20, 120));
@@ -340,7 +284,6 @@
                     line(0, 0, -wakeLength * 0.7, 0);
                 }
                 
-                // Disegno tavola
                 fill(200, 170, 110); stroke(80, 60, 40); strokeWeight(1.5);
                 beginShape();
                 vertex(-this.boardLength / 2, 0); 
@@ -352,47 +295,32 @@
                 bezierVertex(-this.boardLength / 3, this.boardWidth / 2, -this.boardLength / 2 * 0.9, this.boardWidth / 2 * 0.8, -this.boardLength / 2, 0);
                 endShape(CLOSE);
                 fill(180,150,100, 150); noStroke(); ellipse(-this.boardLength*0.35, 0, 10, this.boardWidth*0.6);
-                // Non disegniamo più l'albero visibile
-                // fill(60,60,60); rect(this.mastAttachmentPointX - 4, -4, 8, 8, 2); // Piccolo quadrato per punto attacco (opzionale)
 
-
-                // --- NUOVO DISEGNO VELA COME ARCO VISTO DALL'ALTO ---
                 push();
-                // Sposta l'origine al punto di attacco della vela sulla tavola
                 translate(this.mastAttachmentPointX, 0);
-                // Ruota per l'angolo relativo della vela (boma)
                 rotate(this.currentSailAngle);
 
-                fill(230, 230, 240, 200); // Colore vela
-                stroke(40, 40, 60);
-                strokeWeight(1.5);
-
-                let p1x = 0;
-                let p1y = 0;
-                let p3x = this.sailBaseLength;
-                let p3y = 0;
+                fill(230, 230, 240, 200); stroke(40, 40, 60); strokeWeight(1.5);
+                let p1x = 0, p1y = 0;
+                let p3x = this.sailBaseLength, p3y = 0;
                 let controlX = this.sailBaseLength / 2;
-                
-                let archSign = Math.sign(this.currentSailAngle + 0.0001);
-                if (this.currentSailAngle === 0) archSign = -1; 
-
+                // Assicura che l'arco sia sempre "fuori" dalla tavola a meno che non sia a 0 gradi relativi
+                let archSign = (this.currentSailAngle >= 0 && this.currentSailAngle < PI) ? -1 : 1; // Semplificato
+                if (abs(this.currentSailAngle) < 0.01) archSign = -1; // Per 0 gradi, falla andare "sopra"
                 let controlY = archSign * this.currentSailArchDepth;
 
                 beginShape();
                 vertex(p1x, p1y); 
                 quadraticVertex(controlX, controlY, p3x, p3y); 
-                vertex(p3x,p3y); 
+                // Aggiungi un secondo quadraticVertex per chiudere l'arco e dare spessore visivo
+                quadraticVertex(controlX, controlY * 0.95, p1x, p1y); // Leggermente dentro per effetto
                 endShape(CLOSE); 
-
-                pop(); // Fine trasformazioni vela
-                // --- FINE NUOVO DISEGNO VELA ---
+                pop(); 
                 
-                pop(); // Fine trasformazioni windsurf
+                pop();
             }
             getSpeed() { return this.vel.mag(); }
         }
-        
-        // --- CLASSE WINDSURF ---
         
         // --- CLASSE ISOLA ---
         class Island { 
@@ -474,7 +402,7 @@
         }
 
        function setup() {
-            let canvas = createCanvas(windowWidth, windowHeight); // Coerente con windowResized
+            let canvas = createCanvas(windowWidth, windowHeight);
             canvas.parent(document.body);
             pixelDensity(1);
             
@@ -502,7 +430,7 @@
                     fullscreenBtn.style.display = 'none';
                 }
             }
-            windowResized(); // Chiamata iniziale per assicurare dimensioni corrette
+            windowResized();
         }
         function toggleFullScreen() {
             let elem = document.documentElement;
@@ -520,7 +448,7 @@
         }
         
         function windowResized() {
-            resizeCanvas(windowWidth, windowHeight); // Coerente con setup
+            resizeCanvas(windowWidth, windowHeight);
             updateControlsInfo();
             if (camera) {
                  camera.pos.x = constrain(camera.pos.x, 0, WORLD_WIDTH - width);
@@ -536,7 +464,7 @@
         function draw() {
             if (!wind || !windsurf) { background(0); fill(255); textSize(20); textAlign(CENTER,CENTER); text("Loading...", width/2, height/2); return; }
             background(30, 60, 130);
-            windsurf.handleInput(); handleTouchControls(); // handleTouchControls ora gestisce efficienza
+            windsurf.handleInput(); handleTouchControls();
             updateWind(); windsurf.update(); camera.update();
             for (let island of islands) { if (dist(windsurf.pos.x, windsurf.pos.y, island.pos.x, island.pos.y) < island.size + windsurf.boardLength * 1.5) windsurf.checkCollision(island); }
             push(); camera.apply(); drawOceanSurface();
@@ -614,11 +542,25 @@
             let R = min(width, height) * (isSmallScreen ? 0.055 : 0.04);
             let margin = min(width, height) * (isSmallScreen ? 0.03 : 0.020);
             let cx = ROuterSpeedo + marginSpeedo; let cy = speedoTopY - R - margin;
+            
+            if (!windsurf) return; // Aggiunto controllo per evitare errori se windsurf non è pronto
+
             push(); translate(cx, cy); fill(200,170,110,120); noStroke();
             rect(-R*0.2, -R*0.8, R*0.4, R*1.6, R*0.12);
-            rotate(windsurf.currentSailAngle); // Usa currentSailAngle
+            
+            // Usa windsurf.currentSailAngle per l'indicatore visivo
+            rotate(windsurf.currentSailAngle); 
+
             fill(230,230,250,180); stroke(50); strokeWeight(max(1.2, R*0.05));
-            beginShape(); vertex(0,0); vertex(R*1.2, R*0.2); vertex(R*1.1, -R*0.2); endShape(CLOSE); pop();
+            // Semplificato il disegno della vela dell'indicatore a un triangolo,
+            // dato che la forma ad arco precisa non è essenziale qui e può essere complessa da scalare
+            beginShape();
+            vertex(0,0); // Punto di attacco
+            vertex(R * 1.2, R * 0.15); // Estremità del boma
+            vertex(R * 1.2, -R * 0.15); // Altra estremità
+            endShape(CLOSE);
+            pop();
+
             fill(255); textSize(max(9, R*0.28)); textAlign(CENTER,CENTER);
             text("VELA", cx, cy + R + margin*0.6);
         }
@@ -633,8 +575,10 @@
                 let windIndicatorMargin = min(width, height) * 0.04;
                 let windIndicatorBottom = windIndicatorRadius * 2 + windIndicatorMargin * 2;
                 mapX = margin; mapY = windIndicatorBottom + margin;
-                if (mapY + mapSize > height - margin) mapY = margin;
-            } else {
+                if (mapY + mapSize > height - margin - (min(width,height)*0.1)) { // Aggiunto un po' di spazio extra per non sovrapporre troppo
+                    mapY = margin; // Se non c'è spazio sotto l'indicatore del vento, mettila in alto
+                }
+            } else { // Schermi più grandi
                 mapX = width - mapSize - margin; mapY = height - mapSize - margin;
             }
             let sX = mapSize / WORLD_WIDTH; let sY = mapSize / WORLD_HEIGHT;
@@ -655,7 +599,7 @@
             if (isTouchDevice()) {
                 info += "<b>Controlli Touch:</b><br>";
                 info += "Trascina Metà Sx: Vira<br>";
-                info += "Trascina Metà Dx (Vert.): Efficienza Vela"; // Aggiornato
+                info += "Trascina Metà Dx (Vert.): Efficienza Vela";
                 controlDiv.style.fontSize = "10px";
                 controlDiv.style.padding = "3px";
             } else {
@@ -670,7 +614,7 @@
             text(`Pos: ${windsurf.pos.x.toFixed(0)}, ${windsurf.pos.y.toFixed(0)}`, 10, y); y+=dy;
             text(`Vel: ${windsurf.vel.mag().toFixed(2)} Angle: ${(windsurf.angle * 180/P5_TWO_PI).toFixed(0)}`,10,y); y+=dy;
             text(`SailTarget: ${(windsurf.targetSailAngle * 180/P5_TWO_PI).toFixed(0)} Cur: ${(windsurf.currentSailAngle * 180/P5_TWO_PI).toFixed(0)}`,10,y); y+=dy;
-            text(`SailEff: ${windsurf.sailEfficiencyModifier.toFixed(2)}`,10,y);y+=dy;
+            text(`SailEff: ${windsurf.sailEfficiencyModifier.toFixed(2)} Arch: ${windsurf.currentSailArchDepth.toFixed(2)}`,10,y);y+=dy;
             text(`FPS: ${frameRate().toFixed(1)}`, 10, y); y+=dy;
             text(`Touches: ${touches.length}`, 10, y); y+=dy;
             if(touchState.steer.active) text(`Steer ID: ${touchState.steer.id}`,10,y); y+=dy;
@@ -697,7 +641,7 @@
                 let currentTouch = touches.find(t => t.id === touchState.efficiency.id);
                 if (currentTouch) {
                     let dy = currentTouch.y - touchState.efficiency.startY;
-                    let efficiencyChange = -dy * 0.008 * effectiveDeltaTime; // Aumentata un po' la sensibilità
+                    let efficiencyChange = -dy * 0.008 * effectiveDeltaTime;
                     windsurf.sailEfficiencyModifier += efficiencyChange;
                     windsurf.sailEfficiencyModifier = constrain(windsurf.sailEfficiencyModifier, -1, 1);
                     touchState.efficiency.startY = currentTouch.y; 
@@ -720,24 +664,34 @@
                     touchState.efficiency.id = touch.id;
                 }
             }
-            return false;
+            // Previene il comportamento di default solo se un controllo è stato attivato
+            if (touchState.steer.active || touchState.efficiency.active) {
+                return false;
+            }
+            return true;
         }
 
         function touchEnded(event) {
             if (!isTouchDevice()) return true;
+            let controlWasActive = false;
             for (let endedTouch of event.changedTouches) {
                 if (endedTouch.identifier === touchState.steer.id) {
                     touchState.steer.active = false; touchState.steer.id = -1;
+                    controlWasActive = true;
                 }
                 if (endedTouch.identifier === touchState.efficiency.id) {
                     touchState.efficiency.active = false; touchState.efficiency.id = -1;
+                    controlWasActive = true;
                 }
             }
-            if (touches.length === 0) {
+            if (touches.length === 0) { // Se nessun tocco rimane, resetta tutto
                 touchState.steer.active = false; touchState.steer.id = -1;
                 touchState.efficiency.active = false; touchState.efficiency.id = -1;
             }
-            return false;
+             if (controlWasActive) {
+                return false; // Previene il default se un controllo del gioco è stato rilasciato
+            }
+            return true;
         }
     </script>
 </body>
