@@ -68,7 +68,7 @@
             apply() { translate(-this.pos.x, -this.pos.y); }
         }
 
-        // --- CLASSE WINDSURF ---
+        // --- CLASSE WINDSURF (RIVISTA PER EFFICIENZA VELA) ---
         class Windsurf {
             constructor(x, y) {
                 this.pos = createVector(x, y);
@@ -82,51 +82,54 @@
                 this.sailMastHeight = 70;
                 this.mastOffset = -this.boardLength * 0.15;
 
-                this.maxSpeed = 9; // Aumentata leggermente maxSpeed per il "motore"
+                this.maxSpeed = 7; // Riportata a un valore più "da vela"
                 this.turnRate = 0.04;
-                // this.sailAdjustRate = 0.05; // Non più necessario
                 this.friction = 0.02;
                 this.lateralResistance = 0.92;
-                this.accelerationFactor = 0.08; // Efficienza della vela
+                this.baseAccelerationFactor = 0.08; // Efficienza base della vela
                 this.isColliding = false;
 
-                this.enginePower = 0.05; // Forza del "motore" per accelerare
-                this.brakeMultiplier = 7; // Quanto aumenta l'attrito in frenata
+                this.sailEfficiencyModifier = 0; // Da -1 (meno efficiente) a +1 (più efficiente)
+                this.sailEfficiencyChangeRate = 0.03; // Quanto velocemente cambia l'efficienza
             }
 
-            handleInput() { // Solo per virare la tavola e Accel/Decel
+            handleInput() {
                 let effectiveDeltaTime = deltaTime / 16.66;
                 if (keyIsDown(LEFT_ARROW)) this.turn(-1, effectiveDeltaTime);
                 if (keyIsDown(RIGHT_ARROW)) this.turn(1, effectiveDeltaTime);
-                // Accelerazione e decelerazione gestite in update basandosi sui tasti premuti
+
+                // Modifica l'efficienza della vela
+                if (keyIsDown(UP_ARROW) || keyIsDown(87)) { // W
+                    this.sailEfficiencyModifier += this.sailEfficiencyChangeRate * effectiveDeltaTime;
+                } else if (keyIsDown(DOWN_ARROW) || keyIsDown(83)) { // S
+                    this.sailEfficiencyModifier -= this.sailEfficiencyChangeRate * effectiveDeltaTime;
+                } else {
+                    // Se nessun tasto premuto, l'efficienza tende a tornare a 0 (neutrale)
+                    if (abs(this.sailEfficiencyModifier) > 0.01) {
+                        this.sailEfficiencyModifier -= Math.sign(this.sailEfficiencyModifier) * this.sailEfficiencyChangeRate * 0.5 * effectiveDeltaTime;
+                    } else {
+                        this.sailEfficiencyModifier = 0;
+                    }
+                }
+                this.sailEfficiencyModifier = constrain(this.sailEfficiencyModifier, -1, 1);
             }
 
             turn(direction, dt) { this.angle += this.turnRate * direction * dt; }
-            // adjustSail non è più controllato dall'utente
 
-            // Funzione per calcolare la propulsione per un dato angolo di vela RELATIVO alla tavola
             calculatePropulsionForRelativeSail(boardAngle, relativeSailAngle, currentWindAngle, currentWindStrength) {
                 let sailGlobalAngle = boardAngle + relativeSailAngle;
-                
-                // Angolo tra il vento e la normale della vela (direzione in cui la vela spinge di più)
                 let windToSailNormalAngle = smallestAngleBetween(currentWindAngle, sailGlobalAngle + P5_TWO_PI / 4);
                 let forceMagnitudeOnSail = currentWindStrength * cos(windToSailNormalAngle);
-                
-                // La direzione della forza generata dalla vela è perpendicolare alla sua superficie
                 let forceDirFromSail = sailGlobalAngle + P5_TWO_PI / 4;
-                
-                // Proiezione di questa forza sulla direzione della tavola
                 let angleBetweenForceAndBoard = smallestAngleBetween(forceDirFromSail, boardAngle);
                 let propulsion = forceMagnitudeOnSail * cos(angleBetweenForceAndBoard);
                 return propulsion;
             }
             
-            // Calcola l'angolo RELATIVO ottimale della vela
             calculateOptimalRelativeSailAngle(boardAngle, currentWindAngle, currentWindStrength) {
                 let bestRelativeAngle = 0;
                 let maxPropulsion = -Infinity;
-                // Testare un range completo di angoli relativi da -PI a PI
-                let step = P5_TWO_PI / 72; // Circa 36 test per lato (5 gradi)
+                let step = P5_TWO_PI / 72;
                 for (let testRelAngle = -P5_TWO_PI / 2; testRelAngle <= P5_TWO_PI / 2; testRelAngle += step) {
                     let propulsion = this.calculatePropulsionForRelativeSail(boardAngle, testRelAngle, currentWindAngle, currentWindStrength);
                     if (propulsion > maxPropulsion) {
@@ -134,74 +137,64 @@
                         bestRelativeAngle = testRelAngle;
                     }
                 }
-                 // Se la propulsione massima è negativa o molto piccola, potrebbe essere meglio "mettere in bandiera"
-                if (maxPropulsion < 0.01 && currentWindStrength > 0.1) {
-                    // In questo caso, un angolo di 0 (vela parallela alla tavola)
-                    // o +/- PI/2 (vela perpendicolare) potrebbe essere meno "dannoso",
-                    // ma il calcolo sopra dovrebbe già trovare l'angolo meno peggio.
-                    // Per ora, ci fidiamo del calcolo.
-                }
                 return bestRelativeAngle;
             }
-
 
             update() {
                 let effectiveDeltaTime = deltaTime / 16.66;
 
-                // 1. Auto-orientamento della vela
+                // 1. Auto-orientamento della vela (sempre all'angolo "fisicamente" migliore)
                 this.sailAngle = this.calculateOptimalRelativeSailAngle(this.angle, wind.angle, wind.strength);
 
-                // 2. Propulsione dalla vela
-                let sailPropulsion = this.calculatePropulsionForRelativeSail(this.angle, this.sailAngle, wind.angle, wind.strength);
+                // 2. Calcola propulsione dalla vela
+                let rawSailPropulsion = this.calculatePropulsionForRelativeSail(this.angle, this.sailAngle, wind.angle, wind.strength);
+                
+                // 3. Applica il modificatore di efficienza alla propulsione
+                // L'efficienza va da 0 (se modifier = -1) a 2x (se modifier = +1) la base.
+                // Se rawSailPropulsion è negativa (vento che spinge indietro), l'efficienza non dovrebbe renderla positiva.
+                // Un modo è scalarla se positiva, e magari scalarla meno o diversamente se negativa.
+                // Per ora, modifichiamo solo la parte positiva della propulsione.
+                let effectiveAccelerationFactor = this.baseAccelerationFactor * (1 + this.sailEfficiencyModifier);
+                effectiveAccelerationFactor = max(0, effectiveAccelerationFactor); // Assicura non sia negativo
+                
+                let finalPropulsion = rawSailPropulsion;
+                // Se la propulsione grezza è negativa (es. vento da prua che spinge indietro),
+                // un "boost" di efficienza non dovrebbe magicamente trasformarla in positiva.
+                // Il modificatore di efficienza ora agisce sul *fattore di accelerazione*.
+
                 let boardDirection = p5.Vector.fromAngle(this.angle);
-                let sailAcceleration = boardDirection.copy().mult(sailPropulsion * this.accelerationFactor);
+                let sailAcceleration = boardDirection.copy().mult(finalPropulsion * effectiveAccelerationFactor);
                 this.vel.add(p5.Vector.mult(sailAcceleration, effectiveDeltaTime));
 
-                // 3. Accelerazione/Decelerazione manuale
-                if (keyIsDown(UP_ARROW) || keyIsDown(87)) { // 87 è 'W'
-                    let thrustForce = p5.Vector.fromAngle(this.angle);
-                    thrustForce.mult(this.enginePower); // Forza costante per frame
-                    this.vel.add(p5.Vector.mult(thrustForce, effectiveDeltaTime));
-                }
-                
-                // 4. Attrito e Frenata
-                let currentFrictionFactor = this.friction;
-                if (keyIsDown(DOWN_ARROW) || keyIsDown(83)) { // 83 è 'S'
-                    currentFrictionFactor *= this.brakeMultiplier;
-                }
-                let frictionForce = this.vel.copy().mult(-currentFrictionFactor); // Applicato per frame
+                // 4. Attrito (non c'è più frenata diretta, solo riduzione efficienza vela)
+                let frictionForce = this.vel.copy().mult(-this.friction);
                 this.vel.add(p5.Vector.mult(frictionForce, effectiveDeltaTime));
-
 
                 // 5. Resistenza Laterale
                 let perpendicularToBoard = p5.Vector.fromAngle(this.angle + P5_TWO_PI / 4);
                 let lateralVelocityComponent = p5.Vector.dot(this.vel, perpendicularToBoard);
                 let lateralDragForce = perpendicularToBoard.copy().mult(-lateralVelocityComponent * this.lateralResistance);
-                this.vel.add(p5.Vector.mult(lateralDragForce, effectiveDeltaTime)); // Applicata per frame
+                this.vel.add(p5.Vector.mult(lateralDragForce, effectiveDeltaTime));
 
                 // 6. Limita Velocità Massima
                 if (this.vel.mag() > this.maxSpeed) this.vel.setMag(this.maxSpeed);
-                 // Se la frenata ha quasi fermato, ferma del tutto per evitare micro-movimenti
-                if ((keyIsDown(DOWN_ARROW) || keyIsDown(83)) && this.vel.mag() < 0.05) {
-                    this.vel.set(0,0);
-                }
-
 
                 // 7. Aggiorna Posizione
                 if (!this.isColliding) {
                     this.pos.add(p5.Vector.mult(this.vel, effectiveDeltaTime));
                 } else {
-                    this.vel.mult(0.3); // Rallenta molto se in collisione
+                    this.vel.mult(0.3);
                 }
-                this.isColliding = false; // Resetta per il prossimo frame
+                this.isColliding = false;
 
-                // Bordi del mondo
+                // Bordi del mondo (invariato)
                 if (this.pos.x < this.boardLength / 2) { this.pos.x = this.boardLength / 2; this.vel.x *= -0.3; }
                 if (this.pos.x > WORLD_WIDTH - this.boardLength / 2) { this.pos.x = WORLD_WIDTH - this.boardLength / 2; this.vel.x *= -0.3; }
                 if (this.pos.y < this.boardLength / 2) { this.pos.y = this.boardLength / 2; this.vel.y *= -0.3; }
                 if (this.pos.y > WORLD_HEIGHT - this.boardLength / 2) { this.pos.y = WORLD_HEIGHT - this.boardLength / 2; this.vel.y *= -0.3; }
             }
 
+            // checkCollision e draw rimangono invariate
             checkCollision(island) { /* ... identico a prima ... */ 
                 for (const polygon of island.polygons) {
                     if (collidePointPoly(this.pos.x, this.pos.y, polygon)) {
@@ -263,7 +256,7 @@
                 translate(this.mastOffset, 0);
                 fill(50, 50, 60); ellipse(0, 0, 10, 10);
 
-                rotate(this.sailAngle); // Ora this.sailAngle è l'angolo "ottimale" calcolato
+                rotate(this.sailAngle); 
                 stroke(70, 70, 80); strokeWeight(5); noFill();
                 beginShape();
                 vertex(0,0);
@@ -280,7 +273,7 @@
                 pop();
             }
             getSpeed() { return this.vel.mag(); }
-        }
+        } // Fine classe Windsurf
 
         // --- CLASSE ISOLA ---
         class Island { /* ... identico a prima ... */
@@ -545,16 +538,16 @@
 
         function updateControlsInfo() {
             let info = "<b>Controlli Tastiera:</b><br>";
-            info += "FRECCE Sx/Dx: Vira<br>";
-            info += "FRECCIA SU / W: Accelera<br>";
-            info += "FRECCIA GIU / S: Frena<br><br>";
+            info += "FRECCE Sx/Dx: Vira Tavola<br>";
+            info += "FRECCIA SU / W: Aumenta Efficienza Vela (Accelera)<br>";
+            info += "FRECCIA GIU / S: Riduci Efficienza Vela (Decelera)<br><br>";
 
             let controlDiv = document.getElementById('controlsInfo');
             if (isTouchDevice()) {
                 info += "<b>Controlli Touch:</b><br>";
                 info += "Trascina Metà Sx Schermo: Vira<br>";
-                info += "<i>(Premi per Accel/Freno presto!)</i>"; // Placeholder
-                controlDiv.style.fontSize = "10px"; // Testo più piccolo su touch
+                info += "<i>(Controllo Efficienza Vela touch presto!)</i>";
+                controlDiv.style.fontSize = "10px";
                 controlDiv.style.padding = "3px";
             } else {
                 controlDiv.style.fontSize = "12px";
