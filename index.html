@@ -120,118 +120,127 @@
         </div>
     </div>
 
-    <script>
-        // --- ELEMENTI DEL DOM ---
-        const slider = document.getElementById('board-angle-slider');
-        const boardElement = document.getElementById('board');
-        const sailElement = document.getElementById('sail');
-        const appWindVectorElement = document.getElementById('apparent-wind-vector');
+<!-- ... (tutto l'HTML e il CSS di prima rimangono invariati) ... -->
 
-        const boardAngleValueDisplay = document.getElementById('board-angle-value');
-        const boatSpeedDisplay = document.getElementById('boat-speed-display');
-        const appWindAngleDisplay = document.getElementById('app-wind-angle-display');
-        const appWindSpeedDisplay = document.getElementById('app-wind-speed-display');
-        const sailAngleDisplay = document.getElementById('sail-angle-display');
+<script>
+    // --- ELEMENTI DEL DOM (invariati) ---
+    const slider = document.getElementById('board-angle-slider');
+    const boardElement = document.getElementById('board');
+    const sailElement = document.getElementById('sail');
+    const appWindVectorElement = document.getElementById('apparent-wind-vector');
+    const boardAngleValueDisplay = document.getElementById('board-angle-value');
+    const boatSpeedDisplay = document.getElementById('boat-speed-display');
+    const appWindAngleDisplay = document.getElementById('app-wind-angle-display');
+    const appWindSpeedDisplay = document.getElementById('app-wind-speed-display');
+    const sailAngleDisplay = document.getElementById('sail-angle-display');
 
-        // --- COSTANTI E STATO ---
-        const TRUE_WIND_SPEED = 15; // Vento reale a 15 nodi
-        // Vettore del vento reale: soffia da NORD (angolo -90° in coordinate cartesiane), verso il basso
-        const V_TRUE = { x: 0, y: TRUE_WIND_SPEED }; // y positiva = basso
-        const ITERATIONS = 10; // Numero di iterazioni per trovare l'equilibrio
+    // --- COSTANTI E STATO (invariati) ---
+    const TRUE_WIND_SPEED = 15;
+    const V_TRUE = { x: 0, y: TRUE_WIND_SPEED }; // Vento da Nord (y positiva = basso)
+    const ITERATIONS = 10;
 
-        // --- FUNZIONI DI UTILITÀ VETTORIALE ---
-        const toRadians = (deg) => deg * (Math.PI / 180);
-        const toDegrees = (rad) => rad * (180 / Math.PI);
+    // --- FUNZIONI DI UTILITÀ (invariate) ---
+    const toRadians = (deg) => deg * (Math.PI / 180);
+    const toDegrees = (rad) => rad * (180 / Math.PI);
 
-        // --- FUNZIONE DI CALCOLO DELLA PROPULSIONE (LA TUA LOGICA ORIGINALE) ---
-        // Ora accetta la velocità del vento APPARENTE, non quella reale
-        function calculatePropulsion(absRelWind, signedRelWind, apparentWindSpeed) {
-            if (absRelWind < 45) {
-                return { sailAngle: 0, boatSpeed: 0 };
-            }
-            const halfAngle = absRelWind / 2;
-            const limitedAngle = Math.min(halfAngle, 90);
-            const sailAngle = Math.sign(signedRelWind) * limitedAngle;
-
-            const radians = toRadians(absRelWind);
-            const baseFactor = Math.sin(radians);
-            const downwindOffset = absRelWind > 135 ? 0.2 : 0;
-            const speedFactor = baseFactor * 0.8 + downwindOffset;
-
-            // La velocità della barca è proporzionale alla velocità del VENTO APPARENTE
-            const boatSpeed = apparentWindSpeed * speedFactor;
-            return { sailAngle, boatSpeed };
+    // --- FUNZIONE DI PROPULSIONE (invariata) ---
+    function calculatePropulsion(absRelWind, signedRelWind, apparentWindSpeed) {
+        if (absRelWind < 45) {
+            return { sailAngle: 0, boatSpeed: 0 };
         }
+        const halfAngle = absRelWind / 2;
+        const limitedAngle = Math.min(halfAngle, 90);
+        const sailAngle = Math.sign(signedRelWind) * limitedAngle;
+        const radians = toRadians(absRelWind);
+        const baseFactor = Math.sin(radians);
+        const downwindOffset = absRelWind > 135 ? 0.2 : 0;
+        const speedFactor = baseFactor * 0.8 + downwindOffset;
+        const boatSpeed = apparentWindSpeed * speedFactor;
+        return { sailAngle, boatSpeed };
+    }
 
-        // --- FUNZIONE DI AGGIORNAMENTO PRINCIPALE ---
-        function updateSimulation() {
-            const boardAngleDegrees = parseFloat(slider.value);
-            const boardAngleRadians = toRadians(boardAngleDegrees);
+    // --- FUNZIONE DI AGGIORNAMENTO PRINCIPALE (CORRETTA) ---
+    function updateSimulation() {
+        const boardAngleDegrees = parseFloat(slider.value);
+        const boardAngleRadians = toRadians(boardAngleDegrees);
+        
+        // Vettore che rappresenta la direzione della tavola (vettore unitario)
+        // Angolo 0 = Nord. Rotazione positiva è oraria.
+        // x = sin(theta), y = -cos(theta)
+        const boardDirectionVector = {
+            x: Math.sin(boardAngleRadians),
+            y: -Math.cos(boardAngleRadians)
+        };
 
-            // --- CICLO ITERATIVO PER TROVARE L'EQUILIBRIO ---
-            let boatSpeed = 0;
-            let sailAngle = 0;
-            let apparentWind = { speed: 0, angleDegrees: 0, vector: {x: 0, y:0} };
+        // --- CICLO ITERATIVO PER TROVARE L'EQUILIBRIO ---
+        let boatSpeed = 0;
+        let sailAngle = 0;
+        let apparentWindInfo = { speed: 0, angleDegrees: 0, vector: {x: 0, y:0} };
 
-            for (let i = 0; i < ITERATIONS; i++) {
-                // 1. Calcola il vettore velocità della tavola
-                const v_boat = {
-                    x: boatSpeed * Math.sin(boardAngleRadians),
-                    y: -boatSpeed * Math.cos(boardAngleRadians)
-                };
+        for (let i = 0; i < ITERATIONS; i++) {
+            // 1. Calcola il vettore velocità della tavola (direzione * velocità)
+            const v_boat = {
+                x: boardDirectionVector.x * boatSpeed,
+                y: boardDirectionVector.y * boatSpeed
+            };
 
-                // 2. Calcola il vettore vento apparente: V_app = V_true - V_boat
-                const v_apparent = {
-                    x: V_TRUE.x - v_boat.x,
-                    y: V_TRUE.y - v_boat.y
-                };
+            // 2. Calcola il vettore vento apparente: V_app = V_true - V_boat
+            const v_apparent = {
+                x: V_TRUE.x - v_boat.x,
+                y: V_TRUE.y - v_boat.y
+            };
 
-                // 3. Calcola modulo e angolo del vento apparente
-                const apparentWindSpeed = Math.sqrt(v_apparent.x**2 + v_apparent.y**2);
-                const apparentWindAngleGlobal = toDegrees(Math.atan2(v_apparent.x, -v_apparent.y));
-
-                // 4. Calcola l'angolo del vento apparente RELATIVO alla tavola
-                let signedRelWind = apparentWindAngleGlobal - boardAngleDegrees;
-                // Normalizza l'angolo tra -180 e 180
-                while (signedRelWind <= -180) signedRelWind += 360;
-                while (signedRelWind > 180) signedRelWind -= 360;
-                const absRelWind = Math.abs(signedRelWind);
-                
-                // 5. Usa la formula per calcolare la nuova velocità e l'angolo della vela
-                const propulsion = calculatePropulsion(absRelWind, signedRelWind, apparentWindSpeed);
-                boatSpeed = propulsion.boatSpeed; // Aggiorna la velocità per la prossima iterazione
-                sailAngle = propulsion.sailAngle; // Salva l'ultimo angolo vela calcolato
-                
-                // Salva i dati dell'ultima iterazione per la visualizzazione
-                apparentWind = { 
-                    speed: apparentWindSpeed, 
-                    angleDegrees: signedRelWind,
-                    vector: v_apparent
-                };
-            }
-
-            // --- AGGIORNA GRAFICA E TESTO CON I VALORI DI EQUILIBRIO ---
+            // 3. Calcola modulo e angolo del vento apparente
+            const apparentWindSpeed = Math.sqrt(v_apparent.x**2 + v_apparent.y**2);
             
-            // Grafica
-            boardElement.style.transform = `translate(-50%, -50%) rotate(${boardAngleDegrees}deg)`;
-            sailElement.style.transform = `translate(0, -50%) rotate(${sailAngle}deg)`;
+            // L'angolo del vento apparente rispetto alla direzione della tavola
+            // Questa è la correzione cruciale. Usiamo il prodotto scalare e il prodotto vettoriale (2D)
+            // per trovare l'angolo relativo in modo robusto.
+            
+            // Prodotto Scalare (dot product): v_app · board_dir = |v_app| * |board_dir| * cos(theta)
+            const dotProduct = v_apparent.x * boardDirectionVector.x + v_apparent.y * boardDirectionVector.y;
+            // Prodotto Vettoriale 2D (cross product magnitude): v_app x board_dir = |v_app| * |board_dir| * sin(theta)
+            const crossProduct = v_apparent.x * boardDirectionVector.y - v_apparent.y * boardDirectionVector.x;
+            
+            // L'angolo relativo è atan2(cross, dot). Questo ci dà direttamente l'angolo firmato corretto.
+            let signedRelWindRad = Math.atan2(crossProduct, dotProduct);
+            let signedRelWind = toDegrees(signedRelWindRad);
 
-            const appWindVectorAngle = toDegrees(Math.atan2(apparentWind.vector.y, apparentWind.vector.x));
-            const appWindVectorLength = apparentWind.speed * 4; // Scala per visualizzazione
-            appWindVectorElement.style.width = `${appWindVectorLength}px`;
-            appWindVectorElement.style.transform = `rotate(${appWindVectorAngle}deg)`;
-
-            // Testo
-            boardAngleValueDisplay.textContent = boardAngleDegrees.toFixed(0);
-            boatSpeedDisplay.textContent = boatSpeed.toFixed(2);
-            appWindAngleDisplay.textContent = apparentWind.angleDegrees.toFixed(2);
-            appWindSpeedDisplay.textContent = apparentWind.speed.toFixed(2);
-            sailAngleDisplay.textContent = sailAngle.toFixed(2);
+            const absRelWind = Math.abs(signedRelWind);
+            
+            // 5. Usa la formula per calcolare la nuova velocità e l'angolo della vela
+            const propulsion = calculatePropulsion(absRelWind, signedRelWind, apparentWindSpeed);
+            boatSpeed = propulsion.boatSpeed; // Aggiorna per la prossima iterazione
+            sailAngle = propulsion.sailAngle;
+            
+            // Salva i dati dell'ultima iterazione
+            apparentWindInfo = { 
+                speed: apparentWindSpeed, 
+                angleDegrees: signedRelWind,
+                vector: v_apparent
+            };
         }
 
-        slider.addEventListener('input', updateSimulation);
-        updateSimulation(); // Chiamata iniziale
-    </script>
+        // --- AGGIORNA GRAFICA E TESTO ---
+        boardElement.style.transform = `translate(-50%, -50%) rotate(${boardAngleDegrees}deg)`;
+        sailElement.style.transform = `translate(0, -50%) rotate(${sailAngle}deg)`;
+
+        const appWindVectorAngle = toDegrees(Math.atan2(apparentWindInfo.vector.y, apparentWindInfo.vector.x)) + 90; // +90 per correzione display
+        const appWindVectorLength = apparentWindInfo.speed * 4; // Scala per visualizzazione
+        appWindVectorElement.style.width = `${appWindVectorLength}px`;
+        appWindVectorElement.style.transform = `rotate(${appWindVectorAngle}deg)`;
+
+        // Testo
+        boardAngleValueDisplay.textContent = boardAngleDegrees.toFixed(0);
+        boatSpeedDisplay.textContent = boatSpeed.toFixed(2);
+        appWindAngleDisplay.textContent = apparentWindInfo.angleDegrees.toFixed(2);
+        appWindSpeedDisplay.textContent = apparentWindInfo.speed.toFixed(2);
+        sailAngleDisplay.textContent = sailAngle.toFixed(2);
+    }
+
+    slider.addEventListener('input', updateSimulation);
+    updateSimulation(); // Chiamata iniziale
+</script>
 
 </body>
 </html>
