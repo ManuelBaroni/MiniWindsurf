@@ -1,192 +1,179 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Simulatore di Windsurf Semplice</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      flex-direction: column;
-      background-color: #f0f8ff;
-      color: #333;
-      margin: 0;
-      min-height: 100vh;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulatore di Windsurf (Logica Originale)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            background-color: #f0f8ff;
+            color: #333;
+            margin: 0;
+            min-height: 100vh;
+        }
 
-    .container {
-      text-align: center;
-      padding: 2rem;
-      background-color: white;
-      border-radius: 12px;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-    }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 500px;
+        }
 
-    h1 {
-      color: #005f73;
-    }
+        h1 { color: #005f73; }
+        
+        #simulation-area {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            border: 2px dashed #94d2bd;
+            border-radius: 50%;
+            margin: 2rem auto;
+            background-color: #e9f5ff;
+        }
 
-    #simulation-area {
-      position: relative;
-      width: 300px;
-      height: 300px;
-      border: 2px dashed #94d2bd;
-      border-radius: 50%;
-      margin: 2rem auto;
-      background-color: #e9f5ff;
-    }
+        #wind-indicator {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #0a9396;
+            font-weight: bold;
+        }
+        #wind-indicator::after { content: '↓'; font-size: 24px; display: block; }
 
-    #wind-indicator {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: #0a9396;
-      font-weight: bold;
-    }
+        #board {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 25px; height: 140px;
+            background-color: #ee9b00;
+            border: 2px solid #9b2226;
+            border-radius: 15px 15px 5px 5px;
+            transform-origin: center center;
+            transform: translate(-50%, -50%) rotate(0deg);
+            transition: transform 0.1s linear;
+        }
+        
+        #sail {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 90px; height: 4px;
+            background-color: #005f73;
+            transform-origin: left center;
+            transform: translate(0, -50%) rotate(0deg);
+            transition: transform 0.1s linear;
+        }
 
-    #wind-indicator::after {
-      content: '↓';
-      font-size: 24px;
-      display: block;
-    }
-
-    #board {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 25px;
-      height: 140px;
-      background-color: #ee9b00;
-      border: 2px solid #9b2226;
-      border-radius: 15px 15px 5px 5px;
-      transform-origin: center center;
-      transform: translate(-50%, -50%) rotate(0deg);
-      transition: transform 0.2s ease-out;
-    }
-
-    #sail {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 90px;
-      height: 4px;
-      background-color: #005f73;
-      transform-origin: left center;
-      transform: translate(0, -50%) rotate(0deg);
-      transition: transform 0.2s ease-out;
-    }
-
-    .controls, .results {
-      margin-top: 1.5rem;
-    }
-
-    label {
-      font-weight: bold;
-      color: #0a9396;
-    }
-
-    input[type="range"] {
-      width: 80%;
-      max-width: 400px;
-      cursor: pointer;
-    }
-
-    .results p {
-      margin: 0.5rem 0;
-      font-size: 1.1rem;
-    }
-
-    .results code {
-      background-color: #e9ecef;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 1.2rem;
-      color: #ae2012;
-      min-width: 60px;
-      display: inline-block;
-    }
-  </style>
+        .controls, .results { margin-top: 1.5rem; }
+        label { font-weight: bold; color: #0a9396; }
+        input[type="range"] { width: 90%; max-width: 400px; cursor: pointer; }
+        .results p { margin: 0.5rem 0; font-size: 1rem; }
+        .results code {
+            background-color: #e9ecef; padding: 2px 6px; border-radius: 4px;
+            font-size: 1.1rem; color: #ae2012;
+            min-width: 60px; display: inline-block;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Simulatore di Windsurf</h1>
 
-    <div id="simulation-area">
-      <div id="wind-indicator">VENTO</div>
-      <div id="board">
-        <div id="sail"></div>
-      </div>
+    <div class="container">
+        <h1>Simulatore di Windsurf - Logica Semplice</h1>
+
+        <div id="simulation-area">
+            <div id="wind-indicator">VENTO REALE</div>
+            <div id="board"><div id="sail"></div></div>
+        </div>
+
+        <div class="controls">
+            <label for="board-angle-slider">Rotazione Tavola: <span id="board-angle-value">0</span>°</label><br>
+            <input type="range" id="board-angle-slider" min="-180" max="180" value="0">
+        </div>
+
+        <div class="results">
+            <p>Angolo Vento Relativo: <code id="rel-wind-display">0.0</code>°</p>
+            <p>Angolo Vela (rel. tavola): <code id="sail-angle-display">0.0</code>°</p>
+            <p>Velocità Tavola: <code id="boat-speed-display">0.00</code> nodi</p>
+        </div>
     </div>
 
-    <div class="controls">
-      <label for="board-angle-slider">Rotazione Tavola: <span id="board-angle-value">0</span>°</label><br>
-      <input type="range" id="board-angle-slider" min="-180" max="180" value="0">
-    </div>
+    <script>
+        // --- ELEMENTI DEL DOM ---
+        const slider = document.getElementById('board-angle-slider');
+        const boardElement = document.getElementById('board');
+        const sailElement = document.getElementById('sail');
+        const boardAngleValueDisplay = document.getElementById('board-angle-value');
+        const relWindDisplay = document.getElementById('rel-wind-display');
+        const sailAngleDisplay = document.getElementById('sail-angle-display');
+        const boatSpeedDisplay = document.getElementById('boat-speed-display');
 
-    <div class="results">
-      <p>Vento Relativo (firmato): <code id="rel-wind-display">0.00</code>°</p>
-      <p>Angolo Vela: <code id="sail-angle-display">0.00</code>°</p>
-      <p>Velocità Tavola: <code id="boat-speed-display">0.00</code> nodi</p>
-    </div>
-  </div>
+        // --- COSTANTI DELLA SIMULAZIONE ---
+        const WIND_SPEED = 15; // Velocità del vento fissa
 
-  <script>
-    const slider = document.getElementById('board-angle-slider');
-    const boardElement = document.getElementById('board');
-    const sailElement = document.getElementById('sail');
+        /**
+         * Traduzione diretta della logica originale.
+         * Calcola l'angolo della vela e la velocità della tavola basandosi
+         * sull'angolo tra la tavola e il VENTO REALE.
+         * Questo è un modello semplificato che ignora il vento apparente.
+         * 
+         * @param {number} absRelWind - Angolo assoluto tavola-vento (0-180).
+         * @param {number} signedRelWind - Angolo con segno tavola-vento (-180 a 180).
+         * @param {number} windSpeed - Velocità del vento reale.
+         * @returns {{sailAngle: number, boatSpeed: number}}
+         */
+        function calculateSailingValues(absRelWind, signedRelWind, windSpeed) {
+            // 2) Dead‐zone: sotto i 45°
+            if (absRelWind < 45) {
+                return { sailAngle: 0, boatSpeed: 0 };
+            }
 
-    const boardAngleValueDisplay = document.getElementById('board-angle-value');
-    const relWindDisplay = document.getElementById('rel-wind-display');
-    const sailAngleDisplay = document.getElementById('sail-angle-display');
-    const boatSpeedDisplay = document.getElementById('boat-speed-display');
+            // 3) Calcolo angolo di vela
+            const halfAngle = absRelWind / 2;
+            const limitedAngle = Math.min(halfAngle, 90);
+            const sailAngle = Math.sign(signedRelWind) * limitedAngle;
 
-    const WIND_SPEED = 15; // nodi
-    const WIND_DIR = 0;    // vento da Nord
+            // 4) Calcolo fattore di velocità
+            const radians = absRelWind * (Math.PI / 180);
+            const baseFactor = Math.sin(radians);
+            const downwindOffset = absRelWind > 135 ? 0.2 : 0;
+            const speedFactor = baseFactor * 0.8 + downwindOffset;
 
-    function calculateSailingValues(absRelWind, signedRelWind, windSpeed) {
-      if (absRelWind < 45) {
-        return { sailAngle: 0, boatSpeed: 0 };
-      }
+            // 5) Calcolo velocità barca
+            const boatSpeed = windSpeed * speedFactor;
 
-      const halfAngle = absRelWind / 2;
-      const limitedAngle = Math.min(halfAngle, 90);
-      const sailAngle = Math.sign(signedRelWind) * limitedAngle;
+            return { sailAngle, boatSpeed };
+        }
 
-      const radians = absRelWind * (Math.PI / 180);
-      const baseFactor = Math.sin(radians);
-      const downwindOffset = absRelWind > 135 ? 0.2 : 0;
-      const speedFactor = baseFactor * 0.8 + downwindOffset;
+        // --- FUNZIONE DI AGGIORNAMENTO PRINCIPALE ---
+        function updateSimulation() {
+            // L'angolo della tavola letto dallo slider è il nostro "vento relativo firmato"
+            const signedRelWind = parseFloat(slider.value);
+            const absRelWind = Math.abs(signedRelWind);
 
-      const boatSpeed = windSpeed * speedFactor;
+            // Calcola i valori usando la logica originale
+            const { sailAngle, boatSpeed } = calculateSailingValues(absRelWind, signedRelWind, WIND_SPEED);
 
-      return { sailAngle, boatSpeed };
-    }
+            // Aggiorna la grafica
+            boardElement.style.transform = `translate(-50%, -50%) rotate(${signedRelWind}deg)`;
+            sailElement.style.transform = `translate(0, -50%) rotate(${sailAngle}deg)`;
 
-    function updateSimulation() {
-      const boardAngle = parseFloat(slider.value);
+            // Aggiorna i display testuali
+            boardAngleValueDisplay.textContent = signedRelWind.toFixed(0);
+            relWindDisplay.textContent = signedRelWind.toFixed(1);
+            sailAngleDisplay.textContent = sailAngle.toFixed(1);
+            boatSpeedDisplay.textContent = boatSpeed.toFixed(2);
+        }
 
-      // Calcolo del vento relativo corretto
-      let relativeWind = (WIND_DIR - boardAngle + 360) % 360;
-      let signedRelWind = relativeWind > 180 ? relativeWind - 360 : relativeWind;
-      let absRelWind = Math.abs(signedRelWind);
+        slider.addEventListener('input', updateSimulation);
+        updateSimulation(); // Chiamata iniziale
+    </script>
 
-      const { sailAngle, boatSpeed } = calculateSailingValues(absRelWind, signedRelWind, WIND_SPEED);
-
-      boardElement.style.transform = `translate(-50%, -50%) rotate(${boardAngle}deg)`;
-      sailElement.style.transform = `translate(0, -50%) rotate(${sailAngle}deg)`;
-
-      boardAngleValueDisplay.textContent = boardAngle.toFixed(0);
-      relWindDisplay.textContent = signedRelWind.toFixed(2);
-      sailAngleDisplay.textContent = sailAngle.toFixed(2);
-      boatSpeedDisplay.textContent = boatSpeed.toFixed(2);
-    }
-
-    slider.addEventListener('input', updateSimulation);
-    updateSimulation();
-  </script>
 </body>
 </html>
