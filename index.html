@@ -73,43 +73,24 @@ function updatePhysics() {
     const noGoRadians = radians(NO_GO_ZONE_DEGREES);
     let powerFactor = 0;
 
-    // --- NO-GO ZONE: quando siamo quasi controvento (> 180° - noGo) ---
+    // La no-go zone è quando si punta controvento (angolo vicino a 180° o PI)
     if (absAngle > PI - noGoRadians) {
         powerFactor = 0;
-        board.sailAngle = 0; // La vela "fileggia" al centro, nessuna propulsione
-
+        board.sailAngle = 0; // La vela fileggia al centro
     } else {
-        // --- PROPULSIONE NORMALE: potenza massima a traverso (90°) ---
+        // C'è propulsione. La potenza è massima al traverso (90°).
         powerFactor = sin(absAngle);
 
-        // --- ANGOLA VELA DINAMICO -----------------------------
-        // Vogliamo che la vela si apra in proporzione all'angolo tra tavola e vento,
-        // fino a un massimo di 90° (π/2), ma con un minimo di circa 20° in bolina aperta.
-
-        // 1) Calcoliamo un angolo di base = absAngle / 2
-        let baseSail = absAngle / 2;
-
-        // 2) Limitiamo baseSail a un massimo di π/2 (90°)
-        baseSail = min(baseSail, PI / 2);
-
-        // 3) Se siamo in bolina stretta (da noGo a 45°), diamo un minimo di 20°:
-        if (absAngle < radians(45)) {
-            const minBolina = radians(20);
-            baseSail = map(absAngle, noGoRadians, radians(45), 0, minBolina);
-        }
-
-        // 4) Se siamo in poppa (> 135°), teniamo la vela leggermente più aperta (es. 60°)
-        if (absAngle > radians(135)) {
-            baseSail = radians(60);
-        }
-
-        // 5) Applichiamo il segno: se sin(angleBetween) > 0 => vento da sinistra => vela a destra (+)
+        // --- MODIFICA #2: ANGOLO VELA COME RICHIESTO ---
+        const sailAngleValue = radians(135);
+        
         if (sin(angleBetween) > 0) {
-            board.sailAngle = baseSail;
+            // Vento da sinistra, vela a destra (angolo positivo)
+            board.sailAngle = sailAngleValue;
         } else {
-            board.sailAngle = -baseSail;
+            // Vento da destra, vela a sinistra (angolo negativo)
+            board.sailAngle = -sailAngleValue;
         }
-        // -------------------------------------------------------
     }
 
     board.debug_angleBetween = angleBetween;
@@ -120,13 +101,11 @@ function updatePhysics() {
     board.vel.mult(board.drag);
     board.pos.add(board.vel);
 
-    // Schermo wrapping
     if (board.pos.x > width + 20) board.pos.x = -20;
     if (board.pos.x < -20) board.pos.x = width + 20;
     if (board.pos.y > height + 20) board.pos.y = -20;
     if (board.pos.y < -20) board.pos.y = height + 20;
 }
-
     
     // --- NESSUNA MODIFICA ESTETICA QUI ---
     function drawWindsurf() {
