@@ -66,36 +66,31 @@
 
 function updatePhysics() {
     const boardDirectionVector = p5.Vector.fromAngle(board.angle - PI / 2);
-    // Angolo corretto tra la tavola e la direzione del vento
+    // Angolo corretto tra la tavola e il vento
     const angleBetween = boardDirectionVector.angleBetween(windVector);
     const absAngle = abs(angleBetween);
 
     const noGoRadians = radians(NO_GO_ZONE_DEGREES);
     let powerFactor = 0;
 
-    // Se siamo nella “no‐go zone” (vento praticamente di poppa o di prua),
-    // non c’è propulsione e la vela “fileggia” al centro.
-    if (absAngle > PI - noGoRadians || absAngle < noGoRadians) {
+    // Se siamo nella “no‐go zone” (bolina stretta o poppa stretta),
+    // non c’è propulsione e la vela “fileggia” (angolo = 0).
+    if (absAngle < noGoRadians || absAngle > PI - noGoRadians) {
         powerFactor = 0;
         board.sailAngle = 0;
 
     } else {
-        // Fuori dalla no‐go zone: propulsione → massimo al traverso
+        // Fuori dalla no‐go zone: propulsione massima a traverso
         powerFactor = sin(absAngle);
 
-        // -------------------------
-        // Calcolo dell’angolo vela:
-        //   - absAngle = 0   → sailMag = π   (180°)
-        //   - absAngle = π/2 → sailMag = 3π/4 (135°)
-        //   - absAngle = π   → sailMag = π/2 ( 90°)
-        // Formula: sailMag = π − 0.5 * absAngle
-        // Poi assegno il segno in base al lato da cui arriva il vento:
-        //   sin(angleBetween) > 0 → vento da sinistra  → angolo positivo
-        //   sin(angleBetween) < 0 → vento da destra    → angolo negativo
-        // -------------------------
-
+        // Calcolo dell’angolo di barca-vela richiesto:
+        //   • absAngle = 0   → sailMag = π   (180°)
+        //   • absAngle = π/2 → sailMag = 3π/4 (135°)
+        //   • absAngle = π   → sailMag = π/2 ( 90°)
         let sailMag = PI - 0.5 * absAngle;
-        let sign = (sin(angleBetween) > 0) ? 1 : -1;
+
+        // Determiniamo il segno: vento da sinistra → positivo, da destra → negativo.
+        let sign = (angleBetween >= 0) ? 1 : -1;
         board.sailAngle = sign * sailMag;
     }
 
@@ -108,7 +103,7 @@ function updatePhysics() {
     board.vel.mult(board.drag);
     board.pos.add(board.vel);
 
-    // Schermo wrapping
+    // Wrapping attorno allo schermo
     if (board.pos.x > width + 20)  board.pos.x = -20;
     if (board.pos.x < -20)         board.pos.x = width + 20;
     if (board.pos.y > height + 20) board.pos.y = -20;
