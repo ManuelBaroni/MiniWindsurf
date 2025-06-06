@@ -73,39 +73,48 @@ function updatePhysics() {
     const noGoRadians = radians(NO_GO_ZONE_DEGREES);
     let powerFactor = 0;
 
-    // La no-go zone è quando si punta controvento (angolo vicino a 180° o PI)
-    if (absAngle > PI - noGoRadians) {
+    // Se siamo nella “no‐go zone” (vento praticamente di poppa o di prua),
+    // non c’è propulsione e la vela “fileggia” al centro.
+    if (absAngle > PI - noGoRadians || absAngle < noGoRadians) {
         powerFactor = 0;
-        board.sailAngle = 0; // La vela fileggia al centro
+        board.sailAngle = 0;
+
     } else {
-        // C'è propulsione. La potenza è massima al traverso (90°).
+        // Fuori dalla no‐go zone: propulsione → massimo al traverso
         powerFactor = sin(absAngle);
 
-        // --- MODIFICA #2: ANGOLO VELA COME RICHIESTO ---
-        const sailAngleValue = radians(135);
-        
-        if (sin(angleBetween) > 0) {
-            // Vento da sinistra, vela a destra (angolo positivo)
-            board.sailAngle = sailAngleValue;
-        } else {
-            // Vento da destra, vela a sinistra (angolo negativo)
-            board.sailAngle = -sailAngleValue;
-        }
+        // -------------------------
+        // Calcolo dell’angolo vela:
+        //   - absAngle = 0   → sailMag = π   (180°)
+        //   - absAngle = π/2 → sailMag = 3π/4 (135°)
+        //   - absAngle = π   → sailMag = π/2 ( 90°)
+        // Formula: sailMag = π − 0.5 * absAngle
+        // Poi assegno il segno in base al lato da cui arriva il vento:
+        //   sin(angleBetween) > 0 → vento da sinistra  → angolo positivo
+        //   sin(angleBetween) < 0 → vento da destra    → angolo negativo
+        // -------------------------
+
+        let sailMag = PI - 0.5 * absAngle;
+        let sign = (sin(angleBetween) > 0) ? 1 : -1;
+        board.sailAngle = sign * sailMag;
     }
 
     board.debug_angleBetween = angleBetween;
     board.debug_powerFactor = powerFactor;
 
+    // Applichiamo la forza propulsiva lungo la direzione della tavola
     const force = boardDirectionVector.copy().mult(powerFactor * WIND_SPEED);
     board.vel.add(force);
     board.vel.mult(board.drag);
     board.pos.add(board.vel);
 
-    if (board.pos.x > width + 20) board.pos.x = -20;
-    if (board.pos.x < -20) board.pos.x = width + 20;
+    // Schermo wrapping
+    if (board.pos.x > width + 20)  board.pos.x = -20;
+    if (board.pos.x < -20)         board.pos.x = width + 20;
     if (board.pos.y > height + 20) board.pos.y = -20;
-    if (board.pos.y < -20) board.pos.y = height + 20;
+    if (board.pos.y < -20)         board.pos.y = height + 20;
 }
+
     
     // --- NESSUNA MODIFICA ESTETICA QUI ---
     function drawWindsurf() {
