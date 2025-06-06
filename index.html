@@ -79,41 +79,53 @@
                 board.angle += board.turnSpeed;
             }
         }
-        
         function updatePhysics() {
-            const boardDirectionVector = p5.Vector.fromAngle(board.angle - PI / 2);
-            const angleBetween = boardDirectionVector.angleBetween(windVector);
-            const absAngle = abs(angleBetween);
-            let force = createVector(0, 0);
-        
-            // --- Calcolo powerFactor realistico ---
-            let powerFactor = 0;
-        
-            const noGoRadians = radians(NO_GO_ZONE_DEGREES);
-            
-            if (absAngle < noGoRadians) {
-                powerFactor = 0;
-                board.sailAngle = 0;
-            } else if (absAngle <= PI - noGoRadians) {
-                powerFactor = sin(absAngle);
-                board.sailAngle = -Math.sign(sin(angleBetween)) * constrain(absAngle / 2, 0, PI / 3);
-            } else {
-                powerFactor = 0.4 * sin(absAngle);
-                board.sailAngle = -Math.sign(sin(angleBetween)) * PI / 3;
-            }
-            
-            // --- Applicazione forza ---
-            force = boardDirectionVector.copy().mult(powerFactor * WIND_SPEED);
-            board.vel.add(force);
-            board.vel.mult(board.drag);
-            board.pos.add(board.vel);
-        
-            // Bordo schermo
-            if (board.pos.x > width + 20) board.pos.x = -20;
-            if (board.pos.x < -20) board.pos.x = width + 20;
-            if (board.pos.y > height + 20) board.pos.y = -20;
-            if (board.pos.y < -20) board.pos.y = height + 20;
-        }
+    const boardDirectionVector = p5.Vector.fromAngle(board.angle - PI / 2);
+    const angleBetween = boardDirectionVector.angleBetween(windVector);
+    const absAngle = abs(angleBetween);
+
+    const noGoRadians = radians(NO_GO_ZONE_DEGREES);
+
+    let force = createVector(0, 0);
+    let powerFactor = 0;
+
+    if (absAngle < noGoRadians) {
+        // NO-GO ZONE: nessuna propulsione
+        powerFactor = 0;
+        board.sailAngle = 0;
+    } else if (absAngle < radians(45)) {
+        // Bolina stretta: poca potenza
+        powerFactor = map(absAngle, noGoRadians, radians(45), 0, 0.4);
+        board.sailAngle = -Math.sign(sin(angleBetween)) * PI / 6;
+    } else if (absAngle < radians(90)) {
+        // Bolina larga / Traverso: massima potenza
+        powerFactor = map(absAngle, radians(45), radians(90), 0.4, 1.0);
+        board.sailAngle = -Math.sign(sin(angleBetween)) * PI / 4;
+    } else if (absAngle < radians(135)) {
+        // Lasco: buona potenza
+        powerFactor = map(absAngle, radians(90), radians(135), 1.0, 0.6);
+        board.sailAngle = -Math.sign(sin(angleBetween)) * PI / 3;
+    } else {
+        // Poppa (vento dietro): forza moderata
+        powerFactor = 0.3;
+        board.sailAngle = -Math.sign(sin(angleBetween)) * PI / 3;
+    }
+
+    // Calcolo forza propulsiva
+    force = boardDirectionVector.copy().mult(powerFactor * WIND_SPEED);
+
+    // Applica la forza alla velocità
+    board.vel.add(force);
+    board.vel.mult(board.drag);
+    board.pos.add(board.vel);
+
+    // Bordo schermo
+    if (board.pos.x > width + 20) board.pos.x = -20;
+    if (board.pos.x < -20) board.pos.x = width + 20;
+    if (board.pos.y > height + 20) board.pos.y = -20;
+    if (board.pos.y < -20) board.pos.y = height + 20;
+}
+
 
         function drawWindsurf() {
             push();
