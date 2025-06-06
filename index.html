@@ -36,9 +36,9 @@
     <script>
         // --- COSTANTI DI GIOCO ---
         // Vento: 0 = Nord (dall'alto), 90 = Est, 180 = Sud (dal basso), 270 = Ovest
-        const WIND_DIRECTION_DEGREES = 45; // Vento da Nord-Est
-        const WIND_SPEED = 0.08; // Forza del vento
-        const NO_GO_ZONE_DEGREES = 45; // Ampiezza (per lato) dell'angolo in cui non si avanza
+        const WIND_DIRECTION_DEGREES = 0; // Vento da Nord-Est
+        const WIND_SPEED = 0.04; // Forza del vento
+        const NO_GO_ZONE_DEGREES = 20; // Ampiezza (per lato) dell'angolo in cui non si avanza
 
         // --- VARIABILI GLOBALI ---
         let board;
@@ -79,59 +79,41 @@
                 board.angle += board.turnSpeed;
             }
         }
+        
+function updatePhysics() {
+    const boardDirectionVector = p5.Vector.fromAngle(board.angle - PI / 2);
+    const angleBetween = boardDirectionVector.angleBetween(windVector);
 
-        function updatePhysics() {
-            const boardDirectionVector = p5.Vector.fromAngle(board.angle - PI / 2);
-            const angleBetween = boardDirectionVector.angleBetween(windVector);
+    const noGoZoneRadians = radians(NO_GO_ZONE_DEGREES);
+    let force = createVector(0, 0);
 
-            const noGoZoneRadians = radians(NO_GO_ZONE_DEGREES);
-            let force = createVector(0, 0);
+    if (abs(angleBetween) > PI - noGoZoneRadians) {
+        // No-go zone: vento diretto in prua
+        force = createVector(0, 0);
+        board.sailAngle = 0;
+    } else {
+        // Fuori dalla no-go zone
+        // Riduciamo la forza in poppa piena
+        const downwindReduction = map(abs(angleBetween), PI / 2, PI, 1, 0.4);
+        const powerFactor = Math.abs(sin(angleBetween)) * downwindReduction;
 
-            // Controlliamo se la tavola sta puntando controvento, nella "no-go zone"
-            // L'angolo PI (180°) rappresenta la direzione esattamente controvento.
-            if (abs(angleBetween) > PI - noGoZoneRadians) {
-                // SIAMO NELLA NO-GO ZONE
-                // Nessuna forza di propulsione. La tavola rallenterà per la frizione.
-                force = createVector(0, 0);
-                
-                // La vela "fileggia", non è gonfia e sta al centro.
-                board.sailAngle = 0;
+        force = boardDirectionVector.copy().mult(powerFactor * WIND_SPEED);
 
-            } else {
-                // SIAMO IN UNA ZONA CON PROPULSIONE
-                // Calcoliamo la potenza. Usiamo Math.abs(sin(angle)) che è 0 controvento/poppa
-                // e 1 (massimo) con vento al traverso (perpendicolare).
-                const powerFactor = Math.abs(sin(angleBetween));
-                
-                // La forza di propulsione è nella direzione della tavola
-                force = boardDirectionVector.copy().mult(powerFactor * WIND_SPEED);
+        // Angolo vela dinamico (più realistico)
+        const idealSail = constrain(abs(angleBetween) / 2, 0, PI / 2);
+        board.sailAngle = -Math.sign(sin(angleBetween)) * idealSail;
+    }
 
-                // Posizioniamo la vela automaticamente sul lato SOTTOVENTO
-                // Usiamo il segno di sin(angleBetween) per capire se il vento viene da dx o sx.
-                if (sin(angleBetween) > 0) {
-                    // Vento da "sinistra" (rispetto alla tavola), mettiamo la vela a "destra"
-                    board.sailAngle = PI / 3;
-                } else {
-                    // Vento da "destra", mettiamo la vela a "sinistra"
-                    board.sailAngle = -PI / 3;
-                }
-            }
-            
-            // Applichiamo la forza di propulsione alla velocità
-            board.vel.add(force);
-            
-            // Applichiamo la frizione dell'acqua
-            board.vel.mult(board.drag);
-            
-            // Aggiorniamo la posizione
-            board.pos.add(board.vel);
+    board.vel.add(force);
+    board.vel.mult(board.drag);
+    board.pos.add(board.vel);
 
-            // Gestione bordi schermo
-            if (board.pos.x > width + 20) board.pos.x = -20;
-            if (board.pos.x < -20) board.pos.x = width + 20;
-            if (board.pos.y > height + 20) board.pos.y = -20;
-            if (board.pos.y < -20) board.pos.y = height + 20;
-        }
+    // Schermo wrapping
+    if (board.pos.x > width + 20) board.pos.x = -20;
+    if (board.pos.x < -20) board.pos.x = width + 20;
+    if (board.pos.y > height + 20) board.pos.y = -20;
+    if (board.pos.y < -20) board.pos.y = height + 20;
+}
 
         function drawWindsurf() {
             push();
