@@ -1,246 +1,192 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulatore di Windsurf (Modello Fisico Migliorato)</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            background-color: #f0f8ff;
-            color: #333;
-            margin: 0;
-            padding: 1rem;
-            min-height: 100vh;
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Simulatore di Windsurf Semplice</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      background-color: #f0f8ff;
+      color: #333;
+      margin: 0;
+      min-height: 100vh;
+    }
 
-        .container {
-            text-align: center;
-            padding: 1rem 2rem;
-            background-color: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-        }
+    .container {
+      text-align: center;
+      padding: 2rem;
+      background-color: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
 
-        h1 { color: #005f73; }
-        
-        #simulation-area {
-            position: relative;
-            width: 300px;
-            height: 300px;
-            border: 2px dashed #94d2bd;
-            border-radius: 50%;
-            margin: 1.5rem auto;
-            background-color: #e9f5ff;
-        }
+    h1 {
+      color: #005f73;
+    }
 
-        .indicator {
-            position: absolute;
-            font-weight: bold;
-            font-size: 14px;
-        }
-        #wind-indicator { top: 10px; left: 50%; transform: translateX(-50%); color: #0a9396; }
-        #wind-indicator::after { content: '↓'; font-size: 24px; display: block; }
-        
-        #apparent-wind-vector {
-            position: absolute;
-            top: 50%; left: 50%;
-            height: 2px;
-            background-color: rgba(255, 0, 0, 0.7);
-            transform-origin: left center;
-            transition: all 0.2s ease-out;
-        }
-        #apparent-wind-vector::after {
-            content: '▶';
-            position: absolute;
-            right: -5px; top: 50%;
-            transform: translateY(-50%);
-            color: rgba(255, 0, 0, 0.7);
-        }
+    #simulation-area {
+      position: relative;
+      width: 300px;
+      height: 300px;
+      border: 2px dashed #94d2bd;
+      border-radius: 50%;
+      margin: 2rem auto;
+      background-color: #e9f5ff;
+    }
 
-        #board {
-            position: absolute;
-            top: 50%; left: 50%;
-            width: 25px; height: 140px;
-            background-color: #ee9b00;
-            border: 2px solid #9b2226;
-            border-radius: 15px 15px 5px 5px;
-            transform-origin: center center;
-            transform: translate(-50%, -50%) rotate(0deg);
-            transition: transform 0.2s ease-out;
-        }
-        
-        #sail {
-            position: absolute;
-            top: 50%; left: 50%;
-            width: 90px; height: 4px;
-            background-color: #005f73;
-            transform-origin: left center;
-            transform: translate(0, -50%) rotate(0deg);
-            transition: transform 0.2s ease-out;
-        }
+    #wind-indicator {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #0a9396;
+      font-weight: bold;
+    }
 
-        .controls, .results { margin-top: 1.5rem; }
-        label { font-weight: bold; color: #0a9396; }
-        input[type="range"] { width: 90%; max-width: 400px; cursor: pointer; }
-        .results p { margin: 0.5rem 0; font-size: 1rem; text-align: left; }
-        .results code {
-            background-color: #e9ecef; padding: 2px 6px; border-radius: 4px;
-            font-size: 1.1rem; color: #ae2012;
-            min-width: 70px; display: inline-block; text-align: right;
-        }
-    </style>
+    #wind-indicator::after {
+      content: '↓';
+      font-size: 24px;
+      display: block;
+    }
+
+    #board {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 25px;
+      height: 140px;
+      background-color: #ee9b00;
+      border: 2px solid #9b2226;
+      border-radius: 15px 15px 5px 5px;
+      transform-origin: center center;
+      transform: translate(-50%, -50%) rotate(0deg);
+      transition: transform 0.2s ease-out;
+    }
+
+    #sail {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 90px;
+      height: 4px;
+      background-color: #005f73;
+      transform-origin: left center;
+      transform: translate(0, -50%) rotate(0deg);
+      transition: transform 0.2s ease-out;
+    }
+
+    .controls, .results {
+      margin-top: 1.5rem;
+    }
+
+    label {
+      font-weight: bold;
+      color: #0a9396;
+    }
+
+    input[type="range"] {
+      width: 80%;
+      max-width: 400px;
+      cursor: pointer;
+    }
+
+    .results p {
+      margin: 0.5rem 0;
+      font-size: 1.1rem;
+    }
+
+    .results code {
+      background-color: #e9ecef;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 1.2rem;
+      color: #ae2012;
+      min-width: 60px;
+      display: inline-block;
+    }
+  </style>
 </head>
 <body>
+  <div class="container">
+    <h1>Simulatore di Windsurf</h1>
 
-    <div class="container">
-        <h1>Simulatore Fisico di Windsurf</h1>
-
-        <div id="simulation-area">
-            <div id="wind-indicator" class="indicator">VENTO REALE</div>
-            <div id="board"><div id="sail"></div></div>
-            <div id="apparent-wind-vector"></div>
-        </div>
-
-        <div class="controls">
-            <label for="board-angle-slider">Rotazione Tavola vs Vento Reale: <span id="board-angle-value">0</span>°</label><br>
-            <input type="range" id="board-angle-slider" min="-180" max="180" value="0" step="1">
-        </div>
-
-        <div class="results">
-            <p>Velocità Tavola: <code id="boat-speed-display">0.00</code> nodi</p>
-            <p>Angolo Vento Apparente: <code id="app-wind-angle-display">0.00</code>°</p>
-            <p>Velocità Vento Apparente: <code id="app-wind-speed-display">0.00</code> nodi</p>
-            <p>Angolo Vela: <code id="sail-angle-display">0.00</code>°</p>
-        </div>
+    <div id="simulation-area">
+      <div id="wind-indicator">VENTO</div>
+      <div id="board">
+        <div id="sail"></div>
+      </div>
     </div>
 
-<!-- ... (tutto l'HTML e il CSS di prima rimangono invariati) ... -->
+    <div class="controls">
+      <label for="board-angle-slider">Rotazione Tavola: <span id="board-angle-value">0</span>°</label><br>
+      <input type="range" id="board-angle-slider" min="-180" max="180" value="0">
+    </div>
 
-<script>
-    // --- ELEMENTI DEL DOM (invariati) ---
+    <div class="results">
+      <p>Vento Relativo (firmato): <code id="rel-wind-display">0.00</code>°</p>
+      <p>Angolo Vela: <code id="sail-angle-display">0.00</code>°</p>
+      <p>Velocità Tavola: <code id="boat-speed-display">0.00</code> nodi</p>
+    </div>
+  </div>
+
+  <script>
     const slider = document.getElementById('board-angle-slider');
     const boardElement = document.getElementById('board');
     const sailElement = document.getElementById('sail');
-    const appWindVectorElement = document.getElementById('apparent-wind-vector');
+
     const boardAngleValueDisplay = document.getElementById('board-angle-value');
-    const boatSpeedDisplay = document.getElementById('boat-speed-display');
-    const appWindAngleDisplay = document.getElementById('app-wind-angle-display');
-    const appWindSpeedDisplay = document.getElementById('app-wind-speed-display');
+    const relWindDisplay = document.getElementById('rel-wind-display');
     const sailAngleDisplay = document.getElementById('sail-angle-display');
+    const boatSpeedDisplay = document.getElementById('boat-speed-display');
 
-    // --- COSTANTI E STATO (invariati) ---
-    const TRUE_WIND_SPEED = 15;
-    const V_TRUE = { x: 0, y: TRUE_WIND_SPEED }; // Vento da Nord (y positiva = basso)
-    const ITERATIONS = 10;
+    const WIND_SPEED = 15; // nodi
+    const WIND_DIR = 0;    // vento da Nord
 
-    // --- FUNZIONI DI UTILITÀ (invariate) ---
-    const toRadians = (deg) => deg * (Math.PI / 180);
-    const toDegrees = (rad) => rad * (180 / Math.PI);
+    function calculateSailingValues(absRelWind, signedRelWind, windSpeed) {
+      if (absRelWind < 45) {
+        return { sailAngle: 0, boatSpeed: 0 };
+      }
 
-    // --- FUNZIONE DI PROPULSIONE (invariata) ---
-    function calculatePropulsion(absRelWind, signedRelWind, apparentWindSpeed) {
-        if (absRelWind < 45) {
-            return { sailAngle: 0, boatSpeed: 0 };
-        }
-        const halfAngle = absRelWind / 2;
-        const limitedAngle = Math.min(halfAngle, 90);
-        const sailAngle = Math.sign(signedRelWind) * limitedAngle;
-        const radians = toRadians(absRelWind);
-        const baseFactor = Math.sin(radians);
-        const downwindOffset = absRelWind > 135 ? 0.2 : 0;
-        const speedFactor = baseFactor * 0.8 + downwindOffset;
-        const boatSpeed = apparentWindSpeed * speedFactor;
-        return { sailAngle, boatSpeed };
+      const halfAngle = absRelWind / 2;
+      const limitedAngle = Math.min(halfAngle, 90);
+      const sailAngle = Math.sign(signedRelWind) * limitedAngle;
+
+      const radians = absRelWind * (Math.PI / 180);
+      const baseFactor = Math.sin(radians);
+      const downwindOffset = absRelWind > 135 ? 0.2 : 0;
+      const speedFactor = baseFactor * 0.8 + downwindOffset;
+
+      const boatSpeed = windSpeed * speedFactor;
+
+      return { sailAngle, boatSpeed };
     }
 
-    // --- FUNZIONE DI AGGIORNAMENTO PRINCIPALE (CORRETTA) ---
     function updateSimulation() {
-        const boardAngleDegrees = parseFloat(slider.value);
-        const boardAngleRadians = toRadians(boardAngleDegrees);
-        
-        // Vettore che rappresenta la direzione della tavola (vettore unitario)
-        // Angolo 0 = Nord. Rotazione positiva è oraria.
-        // x = sin(theta), y = -cos(theta)
-        const boardDirectionVector = {
-            x: Math.sin(boardAngleRadians),
-            y: -Math.cos(boardAngleRadians)
-        };
+      const boardAngle = parseFloat(slider.value);
 
-        // --- CICLO ITERATIVO PER TROVARE L'EQUILIBRIO ---
-        let boatSpeed = 0;
-        let sailAngle = 0;
-        let apparentWindInfo = { speed: 0, angleDegrees: 0, vector: {x: 0, y:0} };
+      // Calcolo del vento relativo corretto
+      let relativeWind = (WIND_DIR - boardAngle + 360) % 360;
+      let signedRelWind = relativeWind > 180 ? relativeWind - 360 : relativeWind;
+      let absRelWind = Math.abs(signedRelWind);
 
-        for (let i = 0; i < ITERATIONS; i++) {
-            // 1. Calcola il vettore velocità della tavola (direzione * velocità)
-            const v_boat = {
-                x: boardDirectionVector.x * boatSpeed,
-                y: boardDirectionVector.y * boatSpeed
-            };
+      const { sailAngle, boatSpeed } = calculateSailingValues(absRelWind, signedRelWind, WIND_SPEED);
 
-            // 2. Calcola il vettore vento apparente: V_app = V_true - V_boat
-            const v_apparent = {
-                x: V_TRUE.x - v_boat.x,
-                y: V_TRUE.y - v_boat.y
-            };
+      boardElement.style.transform = `translate(-50%, -50%) rotate(${boardAngle}deg)`;
+      sailElement.style.transform = `translate(0, -50%) rotate(${sailAngle}deg)`;
 
-            // 3. Calcola modulo e angolo del vento apparente
-            const apparentWindSpeed = Math.sqrt(v_apparent.x**2 + v_apparent.y**2);
-            
-            // L'angolo del vento apparente rispetto alla direzione della tavola
-            // Questa è la correzione cruciale. Usiamo il prodotto scalare e il prodotto vettoriale (2D)
-            // per trovare l'angolo relativo in modo robusto.
-            
-            // Prodotto Scalare (dot product): v_app · board_dir = |v_app| * |board_dir| * cos(theta)
-            const dotProduct = v_apparent.x * boardDirectionVector.x + v_apparent.y * boardDirectionVector.y;
-            // Prodotto Vettoriale 2D (cross product magnitude): v_app x board_dir = |v_app| * |board_dir| * sin(theta)
-            const crossProduct = v_apparent.x * boardDirectionVector.y - v_apparent.y * boardDirectionVector.x;
-            
-            // L'angolo relativo è atan2(cross, dot). Questo ci dà direttamente l'angolo firmato corretto.
-            let signedRelWindRad = Math.atan2(crossProduct, dotProduct);
-            let signedRelWind = toDegrees(signedRelWindRad);
-
-            const absRelWind = Math.abs(signedRelWind);
-            
-            // 5. Usa la formula per calcolare la nuova velocità e l'angolo della vela
-            const propulsion = calculatePropulsion(absRelWind, signedRelWind, apparentWindSpeed);
-            boatSpeed = propulsion.boatSpeed; // Aggiorna per la prossima iterazione
-            sailAngle = propulsion.sailAngle;
-            
-            // Salva i dati dell'ultima iterazione
-            apparentWindInfo = { 
-                speed: apparentWindSpeed, 
-                angleDegrees: signedRelWind,
-                vector: v_apparent
-            };
-        }
-
-        // --- AGGIORNA GRAFICA E TESTO ---
-        boardElement.style.transform = `translate(-50%, -50%) rotate(${boardAngleDegrees}deg)`;
-        sailElement.style.transform = `translate(0, -50%) rotate(${sailAngle}deg)`;
-
-        const appWindVectorAngle = toDegrees(Math.atan2(apparentWindInfo.vector.y, apparentWindInfo.vector.x)) + 90; // +90 per correzione display
-        const appWindVectorLength = apparentWindInfo.speed * 4; // Scala per visualizzazione
-        appWindVectorElement.style.width = `${appWindVectorLength}px`;
-        appWindVectorElement.style.transform = `rotate(${appWindVectorAngle}deg)`;
-
-        // Testo
-        boardAngleValueDisplay.textContent = boardAngleDegrees.toFixed(0);
-        boatSpeedDisplay.textContent = boatSpeed.toFixed(2);
-        appWindAngleDisplay.textContent = apparentWindInfo.angleDegrees.toFixed(2);
-        appWindSpeedDisplay.textContent = apparentWindInfo.speed.toFixed(2);
-        sailAngleDisplay.textContent = sailAngle.toFixed(2);
+      boardAngleValueDisplay.textContent = boardAngle.toFixed(0);
+      relWindDisplay.textContent = signedRelWind.toFixed(2);
+      sailAngleDisplay.textContent = sailAngle.toFixed(2);
+      boatSpeedDisplay.textContent = boatSpeed.toFixed(2);
     }
 
     slider.addEventListener('input', updateSimulation);
-    updateSimulation(); // Chiamata iniziale
-</script>
-
+    updateSimulation();
+  </script>
 </body>
 </html>
