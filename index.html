@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Windsurf Game</title>
+    <title>Windsurf Game v2</title>
     <style>
-        /* Stile per centrare il gioco nella pagina */
         body {
             margin: 0;
             padding: 0;
@@ -28,48 +27,42 @@
             margin-top: 5px;
         }
     </style>
-    <!-- Includo la libreria p5.js da un CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 </head>
 <body>
-    <h1>Windsurf Semplice</h1>
+    <h1>Windsurf Semplice (v2)</h1>
     <p>Usa ◀ FRECCIA SINISTRA e FRECCIA DESTRA ▶ per virare.</p>
     
     <script>
         // --- COSTANTI DI GIOCO ---
         // Vento: 0 = Nord (dall'alto), 90 = Est, 180 = Sud (dal basso), 270 = Ovest
         const WIND_DIRECTION_DEGREES = 45; // Vento da Nord-Est
-        const WIND_SPEED = 0.05; // Forza del vento (valore piccolo consigliato)
+        const WIND_SPEED = 0.08; // Forza del vento
+        const NO_GO_ZONE_DEGREES = 45; // Ampiezza (per lato) dell'angolo in cui non si avanza
 
         // --- VARIABILI GLOBALI ---
         let board;
         let windVector;
         
-        // La funzione setup() viene eseguita una sola volta all'avvio
         function setup() {
             createCanvas(800, 600);
             angleMode(RADIANS); // p5.js userà i radianti per gli angoli
 
-            // --- Inizializzazione Tavola da Windsurf ---
             board = {
-                pos: createVector(width / 2, height / 2), // Posizione (vettore)
-                vel: createVector(0, 0), // Velocità (vettore)
-                angle: 0, // Angolo della tavola (0 = punta in alto)
-                turnSpeed: 0.05, // Velocità di rotazione
-                drag: 0.98, // Frizione dell'acqua (più basso = più frizione)
-                sailAngle: 0, // Angolo della vela rispetto alla tavola
+                pos: createVector(width / 2, height / 2),
+                vel: createVector(0, 0),
+                angle: 0,
+                turnSpeed: 0.05,
+                drag: 0.98,
+                sailAngle: 0,
             };
             
-            // --- Calcolo del Vettore Vento ---
-            // Convertiamo i gradi in radianti.
-            // Aggiungiamo -PI/2 perché in p5.js 0 radianti è a destra, mentre noi vogliamo che sia in alto.
             const windAngleRadians = radians(WIND_DIRECTION_DEGREES) - PI / 2;
-            windVector = p5.Vector.fromAngle(windAngleRadians, WIND_SPEED);
+            windVector = p5.Vector.fromAngle(windAngleRadians, 1); // Normalizzato, la forza la applichiamo dopo
         }
 
-        // La funzione draw() viene eseguita in loop, creando l'animazione
         function draw() {
-            background(60, 120, 220); // Un bel colore per l'acqua
+            background(60, 120, 220); 
 
             handleInput();
             updatePhysics();
@@ -79,7 +72,6 @@
         }
 
         function handleInput() {
-            // Controlla se i tasti freccia sono premuti per virare
             if (keyIsDown(LEFT_ARROW)) {
                 board.angle -= board.turnSpeed;
             }
@@ -89,101 +81,100 @@
         }
 
         function updatePhysics() {
-            // --- Calcolo della Forza e della Propulsione ---
-            
-            // 1. Vettore che indica la direzione della tavola
             const boardDirectionVector = p5.Vector.fromAngle(board.angle - PI / 2);
-
-            // 2. Calcoliamo l'angolo tra il vento e la tavola.
-            // L'angolo tra due vettori è una buona misura di quanto la tavola "prende" il vento.
             const angleBetween = boardDirectionVector.angleBetween(windVector);
 
-            // 3. Calcoliamo un "fattore di potenza".
-            // Usiamo Math.abs(sin(angleBetween)) che dà:
-            // - 0 se la tavola è allineata con il vento (sia di poppa che di prua)
-            // - 1 se la tavola è perpendicolare al vento (massima velocità)
-            // Aggiungiamo un valore base (0.2) per avere un po' di spinta anche con vento in poppa.
-            const powerFactor = 0.2 + 0.8 * Math.abs(sin(angleBetween));
+            const noGoZoneRadians = radians(NO_GO_ZONE_DEGREES);
+            let force = createVector(0, 0);
+
+            // Controlliamo se la tavola sta puntando controvento, nella "no-go zone"
+            // L'angolo PI (180°) rappresenta la direzione esattamente controvento.
+            if (abs(angleBetween) > PI - noGoZoneRadians) {
+                // SIAMO NELLA NO-GO ZONE
+                // Nessuna forza di propulsione. La tavola rallenterà per la frizione.
+                force = createVector(0, 0);
+                
+                // La vela "fileggia", non è gonfia e sta al centro.
+                board.sailAngle = 0;
+
+            } else {
+                // SIAMO IN UNA ZONA CON PROPULSIONE
+                // Calcoliamo la potenza. Usiamo Math.abs(sin(angle)) che è 0 controvento/poppa
+                // e 1 (massimo) con vento al traverso (perpendicolare).
+                const powerFactor = Math.abs(sin(angleBetween));
+                
+                // La forza di propulsione è nella direzione della tavola
+                force = boardDirectionVector.copy().mult(powerFactor * WIND_SPEED);
+
+                // Posizioniamo la vela automaticamente sul lato SOTTOVENTO
+                // Usiamo il segno di sin(angleBetween) per capire se il vento viene da dx o sx.
+                if (sin(angleBetween) > 0) {
+                    // Vento da "sinistra" (rispetto alla tavola), mettiamo la vela a "destra"
+                    board.sailAngle = PI / 3;
+                } else {
+                    // Vento da "destra", mettiamo la vela a "sinistra"
+                    board.sailAngle = -PI / 3;
+                }
+            }
             
-            // 4. Creiamo un vettore di forza basato sulla direzione della tavola e la potenza calcolata
-            const force = boardDirectionVector.copy().mult(powerFactor * WIND_SPEED);
-            
-            // 5. Applichiamo la forza alla velocità
+            // Applichiamo la forza di propulsione alla velocità
             board.vel.add(force);
             
-            // 6. Applichiamo la frizione dell'acqua per non accelerare all'infinito
+            // Applichiamo la frizione dell'acqua
             board.vel.mult(board.drag);
             
-            // 7. Aggiorniamo la posizione della tavola
+            // Aggiorniamo la posizione
             board.pos.add(board.vel);
 
-            // --- Posizionamento Automatico della Vela ---
-            // Determiniamo se il vento viene da "destra" o "sinistra" rispetto alla tavola
-            // Usiamo il segno di sin(angleBetween) per capirlo
-            if (sin(angleBetween) > 0) {
-                // Vento da "sinistra", mettiamo la vela a "destra"
-                board.sailAngle = PI / 3; // circa 60 gradi
-            } else {
-                // Vento da "destra", mettiamo la vela a "sinistra"
-                board.sailAngle = -PI / 3;
-            }
-
-            // --- Gestione dei bordi dello schermo (effetto "wrap-around") ---
-            if (board.pos.x > width) board.pos.x = 0;
-            if (board.pos.x < 0) board.pos.x = width;
-            if (board.pos.y > height) board.pos.y = 0;
-            if (board.pos.y < 0) board.pos.y = height;
+            // Gestione bordi schermo
+            if (board.pos.x > width + 20) board.pos.x = -20;
+            if (board.pos.x < -20) board.pos.x = width + 20;
+            if (board.pos.y > height + 20) board.pos.y = -20;
+            if (board.pos.y < -20) board.pos.y = height + 20;
         }
 
         function drawWindsurf() {
-            push(); // Salva lo stato attuale del canvas (trasformazioni, colori, etc.)
-            
-            // Spostiamo l'origine del disegno sulla posizione della tavola
+            push();
             translate(board.pos.x, board.pos.y);
-            // Ruotiamo il canvas in base all'angolo della tavola
             rotate(board.angle);
 
-            // Disegniamo la tavola (un rettangolo con una punta a triangolo)
-            // La disegniamo orientata verso l'alto (direzione 0)
-            fill(240, 230, 140); // Colore sabbia
+            // Tavola
+            fill(240, 230, 140);
             noStroke();
             rectMode(CENTER);
-            rect(0, 0, 15, 60); // Corpo della tavola
+            rect(0, 0, 15, 60);
             
-            // Punta della tavola
-            fill(210, 180, 140); // Un po' più scura
+            // Punta
+            fill(210, 180, 140);
             triangle(0, -40, -7.5, -30, 7.5, -30);
 
-            // Disegniamo la vela
+            // Disegniamo albero e vela
             push();
-            rotate(board.sailAngle); // Applichiamo la rotazione relativa della vela
-            fill(255, 255, 255, 200); // Bianca e semi-trasparente
+            rotate(board.sailAngle);
+            
+            // Vela
+            fill(255, 255, 255, 200);
             stroke(50);
             strokeWeight(2);
-            // La vela è un rettangolo sottile che parte dal centro della tavola
-            rect(0, -25, 4, 50); 
-            pop();
-
-            pop(); // Ripristina lo stato del canvas
+            rect(0, -25, 4, 50); // Simula l'albero con la vela attaccata
+            
+            pop(); // fine rotazione vela
+            pop(); // fine rotazione tavola
         }
 
         function drawWindIndicator() {
             push();
-            translate(50, 50); // Posizione dell'indicatore (angolo in alto a sinistra)
-            
-            // Disegna il cerchio esterno
+            translate(50, 50);
             noFill();
             stroke(255, 255, 255, 150);
             strokeWeight(2);
             ellipse(0, 0, 40, 40);
             
-            // Disegna la scritta "N" per il Nord
             fill(255);
             noStroke();
             textAlign(CENTER, CENTER);
             text('N', 0, -28);
 
-            // Disegna la freccia del vento
             rotate(radians(WIND_DIRECTION_DEGREES));
             stroke(255, 0, 0);
             strokeWeight(3);
@@ -191,10 +182,8 @@
             fill(255, 0, 0);
             noStroke();
             triangle(0, 20, -5, 10, 5, 10);
-            
             pop();
         }
-
     </script>
 </body>
 </html>
