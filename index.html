@@ -83,32 +83,30 @@
 function updatePhysics() {
     const boardDirectionVector = p5.Vector.fromAngle(board.angle - PI / 2);
     const angleBetween = boardDirectionVector.angleBetween(windVector);
-
-    const noGoZoneRadians = radians(NO_GO_ZONE_DEGREES);
+    const absAngle = abs(angleBetween);
     let force = createVector(0, 0);
 
-    if (abs(angleBetween) > PI - noGoZoneRadians) {
-        // No-go zone: vento diretto in prua
-        force = createVector(0, 0);
+    // --- Calcolo powerFactor realistico ---
+    let powerFactor = 0;
+
+    if (absAngle < radians(45)) {
+        powerFactor = 0; // No-go zone
         board.sailAngle = 0;
+    } else if (absAngle <= radians(135)) {
+        powerFactor = sin(absAngle); // Bolina/Traverso/Lasco
+        board.sailAngle = -Math.sign(sin(angleBetween)) * constrain(absAngle / 2, 0, PI / 2);
     } else {
-        // Fuori dalla no-go zone
-        // Riduciamo la forza in poppa piena
-        const downwindReduction = map(abs(angleBetween), PI / 2, PI, 1, 0.4);
-        const powerFactor = Math.abs(sin(angleBetween)) * downwindReduction;
-
-        force = boardDirectionVector.copy().mult(powerFactor * WIND_SPEED);
-
-        // Angolo vela dinamico (più realistico)
-        const idealSail = constrain(abs(angleBetween) / 2, 0, PI / 2);
-        board.sailAngle = -Math.sign(sin(angleBetween)) * idealSail;
+        powerFactor = 0.4 * sin(absAngle); // Poppa inefficiente
+        board.sailAngle = -Math.sign(sin(angleBetween)) * PI / 3;
     }
 
+    // --- Applicazione forza ---
+    force = boardDirectionVector.copy().mult(powerFactor * WIND_SPEED);
     board.vel.add(force);
     board.vel.mult(board.drag);
     board.pos.add(board.vel);
 
-    // Schermo wrapping
+    // Bordo schermo
     if (board.pos.x > width + 20) board.pos.x = -20;
     if (board.pos.x < -20) board.pos.x = width + 20;
     if (board.pos.y > height + 20) board.pos.y = -20;
