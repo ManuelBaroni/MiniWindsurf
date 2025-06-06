@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Windsurf 2D Game</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Nasconde le barre di scorrimento */
+            background-color: #000;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            display: block;
+        }
+        .info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="info">
+        <h1>Windsurf 2D</h1>
+        <p>Usa <strong>Freccia Sinistra</strong> e <strong>Freccia Destra</strong> per virare.</p>
+    </div>
+
+<script>
+
+// ===================================
+// IMPOSTAZIONI GLOBALI DEL GIOCO
+// ===================================
+let windsurf;
+let wind;
+let windParticles = [];
+
+const TURN_SPEED = 2.5; // Velocità di virata in gradi per frame
+const DRAG_COEFFICIENT = 0.985; // Frizione dell'acqua (più vicino a 1, meno frizione)
+const ACCELERATION_FACTOR = 0.02; // Controlla quanto velocemente si accelera
+
+
+// ===================================
+// FUNZIONE DI FISICA DELLA VELA
+// Traduzione della funzione C# fornita
+// ===================================
+
+/**
+ * Calcola l'angolo ottimale della vela e la velocità risultante della tavola.
+ * @param {number} windSpeed - Velocità del vento.
+ * @param {number} windDir - Direzione del vento in gradi (0-360).
+ * @param {number} boatDir - Direzione della tavola in gradi (0-360).
+ * @returns {{sailAngle: number, boatSpeed: number, speedFactor: number}} Oggetto con angolo vela, velocità tavola e fattore di velocità.
+ */
+function calculateSailAndSpeed(windSpeed, windDir, boatDir) {
+    // 1) Calcola l'angolo di vento vero relativo rispetto alla prua, in [-180, +180]
+    let rawDiff = (windDir - boatDir + 360) % 360;
+    // Adesso rawDiff ∈ [0, 360). Trasformiamolo in [-180, +180]:
+    let signedRelWind = rawDiff > 180 ? rawDiff - 360 : rawDiff;
+    // signedRelWind ∈ (–180, +180).
+    // Per determinare la dead‐zone e la velocità, useremo |signedRelWind|:
+    let absRelWind = Math.abs(signedRelWind); // ∈ [0, 180]
+
+    // 2) Dead‐zone: sotto i 45° (bolina stretta) non si naviga
+    if (absRelWind < 45) {
+        return { sailAngle: 0, boatSpeed: 0, speedFactor: 0 };
+    }
+
+    // 3) Calcolo continuo dell'angolo di vela (senza superare 90°),
+    //    ma ne conserviamo il segno per capire da che lato sta la vela.
+    let halfAngle = absRelWind / 2;     // metà dell'angolo apparente
+    let limitedAngle = halfAngle > 90 ? 90 : halfAngle;
+    // Infine, aggiungiamo il segno di signedRelWind:
+    let sailAngle = Math.sign(signedRelWind) * limitedAngle;
+    // — se signedRelWind > 0 → vento “da destra” → sailAngle positivo (sulla starboard)
+    // — se signedRelWind < 0 → vento “da sinistra” → sailAngle negativo (sulla port)
+
+    // 4) Calcolo continuo della velocità (speedFactor) tramite seno + offset
+    //    in modo da avere 0 a 0° e 180°, picco a 90°, ma almeno un minimo in poppa
+    let radians = absRelWind * (Math.PI / 180.0);
+    let baseFactor = Math.sin(radians);         // sin(θ) ∈ [0,1]
+    let downwindOffset = absRelWind > 135 ? 0.2 : 0;
+    let speedFactor = baseFactor * 0.8 + downwindOffset;
+    // — su traverso (≈ 90°), speedFactor ≈ 0.8
+    // — oltre i 135° (lasco/poppa), aggiunge 0.2,
+    //   quindi a 180° avremo 0.0*0.8 + 0.2 = 0.2
+
+    // 5) Calcolo velocità barca
+    let boatSpeed = windSpeed * speedFactor;
+
+    return { sailAngle, boatSpeed, speedFactor };
+}
+
+
+// ===================================
+// LOGICA DEL GIOCO p5.js
+// ===================================
+
+function setup() {
+    createCanvas(windowWidth, windowHeight);
+    angleMode(DEGREES); // Cruciale! Usiamo i gradi per tutte le rotazioni.
+
+    // Inizializzazione del windsurf
+    windsurf = {
+        pos: createVector(width / 2, height / 2),
+        vel: createVector(0, 0),
+        dir: 0, // Direzione in gradi (0 = destra)
+        sailAngle: 0,
+        speedFactor: 0
+    };
+
+    // Inizializzazione del vento
+    wind = {
+        speed: 8, // Velocità del vento
+        dir: 270  // Direzione del vento (270 = dall'alto verso il basso)
+    };
+
+    // Creazione delle particelle del vento per visualizzazione
+    for (let i = 0; i < 200; i++) {
+        windParticles.push(createVector(random(width), random(height)));
+    }
+}
+
+function draw() {
+    // --- SFONDO E VENTO ---
+    background('#0077be'); // Un bel blu mare
+    drawWind();
+
+    // --- GESTIONE INPUT ---
+    handleInput();
+
+    // --- AGGIORNAMENTO FISICA ---
+    updatePhysics();
+
+    // --- DISEGNO ELEMENTI ---
+    drawWindsurf();
+    
+    // --- GESTIONE BORDI SCHERMO ---
+    wrapScreen();
+}
+
+function handleInput() {
+    if (keyIsDown(LEFT_ARROW)) {
+        windsurf.dir = (windsurf.dir - TURN_SPEED + 360) % 360;
+    }
+    if (keyIsDown(RIGHT_ARROW)) {
+        windsurf.dir = (windsurf.dir + TURN_SPEED) % 360;
+    }
+}
+
+function updatePhysics() {
+    // 1. Calcola la fisica della vela usando la funzione dedicata
+    const physicsResult = calculateSailAndSpeed(wind.speed, wind.dir, windsurf.dir);
+    windsurf.sailAngle = physicsResult.sailAngle;
+    windsurf.speedFactor = physicsResult.speedFactor;
+
+    // 2. Calcola la forza di propulsione
+    // La forza è nella direzione della tavola, con magnitudine data da boatSpeed
+    let propulsionForce = p5.Vector.fromAngle(windsurf.dir, physicsResult.boatSpeed);
+
+    // 3. Applica la forza all'accelerazione e quindi alla velocità
+    // Usiamo ACCELERATION_FACTOR per rendere l'accelerazione più fluida
+    windsurf.vel.add(propulsionForce.mult(ACCELERATION_FACTOR));
+
+    // 4. Applica la frizione dell'acqua (drag)
+    windsurf.vel.mult(DRAG_COEFFICIENT);
+
+    // 5. Aggiorna la posizione
+    windsurf.pos.add(windsurf.vel);
+}
+
+
+function drawWindsurf() {
+    push(); // Salva lo stato corrente del disegno
+
+    // Spostati e ruota il sistema di coordinate per disegnare il windsurf
+    translate(windsurf.pos.x, windsurf.pos.y);
+    rotate(windsurf.dir);
+
+    // Disegna la VELA (prima, così sta sotto la tavola)
+    drawSail();
+
+    // Disegna la TAVOLA
+    drawBoard();
+
+    pop(); // Ripristina lo stato del disegno
+}
+
+function drawBoard() {
+    // Un disegno carino e dettagliato per la tavola da windsurf
+    noStroke();
+    
+    // Corpo principale della tavola
+    fill(240, 230, 200); // Colore sabbia/fibra di vetro
+    beginShape();
+    vertex(40, 0);      // Prua (punta)
+    bezierVertex(20, -15, -30, -15, -50, -12); // Curva lato sinistro
+    vertex(-60, 0);     // Poppa (centro)
+    bezierVertex(-30, 15, 20, 15, 40, 0);     // Curva lato destro
+    endShape(CLOSE);
+    
+    // Dettaglio centrale (deck pad)
+    fill(80, 80, 90, 200);
+    rect(-45, -8, 70, 16, 5); // Rettangolo arrotondato
+    
+    // Pinna (sotto la tavola, appena visibile)
+    fill(50);
+    triangle(-45, 0, -60, 5, -60, -5);
+}
+
+function drawSail() {
+    push();
+    
+    // L'angolo della vela è relativo alla tavola
+    rotate(windsurf.sailAngle);
+    
+    // La base della vela è leggermente dietro il centro di rotazione della tavola
+    translate(-10, 0); 
+    
+    stroke(30);
+    strokeWeight(3);
+    
+    // Il colore e il "gonfiore" della vela dipendono dalla potenza
+    let sailColor = color(255, 60, 50, 220); // Rosso acceso
+    let sailFullness = 40 + (windsurf.speedFactor * 60); // L'arco è più ampio con più potenza
+    
+    fill(sailColor);
+    
+    // Disegniamo la vela come un arco.
+    // L'arco parte da un punto, va verso un altro, e la sua curvatura lo fa "gonfiare".
+    // La vela è un arco che va da (0, -40) a (0, 40)
+    // Lo facciamo con beginShape() per un controllo migliore
+    beginShape();
+    vertex(0, -45); // Punta della vela
+    // Il punto di controllo della curva si sposta per dare l'effetto "gonfio"
+    // Il segno di sailAngle ci dice da che parte gonfiare
+    let curveControlX = -sailFullness * Math.sign(windsurf.sailAngle + 0.01); // Aggiungiamo 0.01 per evitare Math.sign(0)
+    quadraticVertex(curveControlX, 0, 0, 45); // Curva
+    endShape();
+    
+    pop();
+}
+
+function drawWind() {
+    stroke(255, 255, 255, 150); // Particelle bianche semi-trasparenti
+    strokeWeight(2);
+    let windVector = p5.Vector.fromAngle(wind.dir, wind.speed / 2);
+
+    for (let p of windParticles) {
+        // Disegna una piccola linea per la particella di vento
+        line(p.x, p.y, p.x + windVector.x * 2, p.y + windVector.y * 2);
+
+        // Muovi la particella
+        p.add(windVector);
+
+        // Se la particella esce dallo schermo, la riposiziona dall'altro lato
+        if (p.x > width) p.x = 0;
+        if (p.x < 0) p.x = width;
+        if (p.y > height) p.y = 0;
+        if (p.y < 0) p.y = height;
+    }
+}
+
+function wrapScreen() {
+    // Se il windsurf esce dallo schermo, lo fa riapparire dal lato opposto
+    if (windsurf.pos.x > width + 60) windsurf.pos.x = -60;
+    if (windsurf.pos.x < -60) windsurf.pos.x = width + 60;
+    if (windsurf.pos.y > height + 60) windsurf.pos.y = -60;
+    if (windsurf.pos.y < -60) windsurf.pos.y = height + 60;
+}
+
+// Ridimensiona il canvas se la finestra del browser cambia dimensione
+function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+}
+
+</script>
+
+</body>
+</html>
