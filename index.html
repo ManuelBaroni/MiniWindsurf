@@ -218,4 +218,13 @@
 
         // --- EVENT LISTENER ---
         // Aggiorna la simulazione ogni volta che lo slider viene mosso
-        slider.addEventListener('input', updateSimulation)
+        slider.addEventListener('input', updateSimulation);
+
+        // --- INIZIALIZZAZIONE ---
+        // Esegui la funzione una volta al caricamento della pagina per impostare lo stato iniziale
+        updateSimulation();
+
+    </script>
+
+</body>
+</html>
