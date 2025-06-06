@@ -127,36 +127,34 @@
 }
 
 
-function drawWindsurf() {
-    push();
-    translate(board.pos.x, board.pos.y);
-    rotate(board.angle);
+        function drawWindsurf() {
+            push();
+            translate(board.pos.x, board.pos.y);
+            rotate(board.angle);
 
-    // Tavola
-    fill(240, 230, 140);
-    noStroke();
-    rectMode(CENTER);
-    rect(0, 0, 15, 60);
+            // Tavola
+            fill(240, 230, 140);
+            noStroke();
+            rectMode(CENTER);
+            rect(0, 0, 15, 60);
+            
+            // Punta
+            fill(210, 180, 140);
+            triangle(0, -40, -7.5, -30, 7.5, -30);
 
-    // Punta
-    fill(210, 180, 140);
-    triangle(0, -40, -7.5, -30, 7.5, -30);
-
-    // Vela (ruota intorno al piede dell'albero)
-    push();
-    translate(0, -30); // punto dove si attacca l'albero
-    rotate(board.sailAngle); // ruota la vela intorno all'albero
-
-    // Disegno albero + vela
-    fill(255, 255, 255, 200);
-    stroke(50);
-    strokeWeight(2);
-    rect(0, 0, 4, 50); // Vela: parte da albero verso il basso
-
-    pop(); // fine rotazione vela
-    pop(); // fine rotazione tavola
-}
-
+            // Disegniamo albero e vela
+            push();
+            rotate(board.sailAngle);
+            
+            // Vela
+            fill(255, 255, 255, 200);
+            stroke(50);
+            strokeWeight(2);
+            rect(0, -25, 4, 50); // Simula l'albero con la vela attaccata
+            
+            pop(); // fine rotazione vela
+            pop(); // fine rotazione tavola
+        }
 
         function drawWindIndicator() {
             push();
