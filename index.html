@@ -64,7 +64,7 @@
         }
     }
 
-    function updatePhysics() {
+      function updatePhysics() {
         const boardDirectionVector = p5.Vector.fromAngle(board.angle - PI / 2);
         // Angolo corretto tra la tavola e la direzione del vento
         const angleBetween = boardDirectionVector.angleBetween(windVector);
@@ -81,15 +81,24 @@
             // C'è propulsione. La potenza è massima al traverso (90°).
             powerFactor = sin(absAngle);
 
-            // --- MODIFICA #2: ANGOLO VELA COME RICHIESTO ---
-            const sailAngleValue = radians(135);
+            // --- NUOVA LOGICA AVANZATA PER L'ANGOLO DELLA VELA ---
             
+            // Definiamo gli angoli minimo e massimo della vela rispetto alla tavola.
+            const MIN_SAIL_ANGLE_RAD = radians(20); // Angolo quando si è di bolina stretta (vela cazzata)
+            const MAX_SAIL_ANGLE_RAD = radians(90); // Angolo quando si è in poppa (vela lascata)
+
+            // Mappiamo l'angolo della tavola rispetto al vento (l'andatura) sull'angolo della vela.
+            // absAngle va da (PI - noGoRadians) [bolina] a 0 [poppa].
+            // L'angolo della vela andrà da MIN a MAX corrispondentemente.
+            let targetSailAngle = map(absAngle, PI - noGoRadians, 0, MIN_SAIL_ANGLE_RAD, MAX_SAIL_ANGLE_RAD);
+
+            // Ora applichiamo il lato corretto (destra o sinistra)
             if (sin(angleBetween) > 0) {
                 // Vento da sinistra, vela a destra (angolo positivo)
-                board.sailAngle = sailAngleValue;
+                board.sailAngle = targetSailAngle;
             } else {
                 // Vento da destra, vela a sinistra (angolo negativo)
-                board.sailAngle = -sailAngleValue;
+                board.sailAngle = -targetSailAngle;
             }
         }
 
@@ -106,7 +115,7 @@
         if (board.pos.y > height + 20) board.pos.y = -20;
         if (board.pos.y < -20) board.pos.y = height + 20;
     }
-
+    
     // --- NESSUNA MODIFICA ESTETICA QUI ---
     function drawWindsurf() {
         push();
