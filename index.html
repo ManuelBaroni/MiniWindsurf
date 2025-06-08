@@ -67,61 +67,68 @@
     }
 
     function updatePhysics() {
-        // 1) Direzione prua della tavola (vettore unitario)
-        const boardDirectionVector = p5.Vector.fromAngle(board.angle - PI / 2);
-        // 2) Angolo tra prua tavola e vento, in [-π, +π]
-        const angleBetween = boardDirectionVector.angleBetween(windVector);
-        const absAngle = abs(angleBetween);
-        board.debug_angleBetween = angleBetween;
+    // 1) Vettore di direzione della prua (board.angle punta verso la prua)
+    const boardDirectionVector = p5.Vector.fromAngle(board.angle - PI / 2);
 
-        const noGoRadians = radians(NO_GO_ZONE_DEGREES);
-        let powerFactor = 0;
+    // 2) Vettore del vento (già normalizzato in setup): windVector
+    // Calcoliamo l’angolo assoluto tra prua e vento [0 .. π]
+    const angleBetween = boardDirectionVector.angleBetween(windVector);
+    const absAngle = abs(angleBetween);
 
-        // 3a) Bolina stretta (absAngle < noGoRadians): nessuna propulsione, vela centrata a 180°
-        if (absAngle < noGoRadians) {
-            powerFactor = 0;
-            board.targetSailAngle = PI;  // vela “piatta” allineata alla prua, 180°
-        }
-        // 3b) Poppa stretta (absAngle > π - noGoRadians): poca propulsione, vela a ±90°
-        else if (absAngle > PI - noGoRadians) {
-            powerFactor = 0.2;  // piccola spinta anche in poppa stretta
-            // angolo vela = 90° (π/2), con segno in base al lato vento
-            let sign = (angleBetween >= 0) ? 1 : -1;
-            board.targetSailAngle = sign * (PI / 2);
-        }
-        // 3c) Altre andature (bolina larga, traverso, lasco): potenza variabile, angolo variabile
-        else {
-            // Propulsione proporzionale a sin(absAngle) (massima a traverso)
-            powerFactor = sin(absAngle);
+    // 3) Determiniamo da che lato arriva il vento con il prodotto vettoriale (cross Z)
+    //    cross > 0  → vento arriva da sinistra di boardDirectionVector
+    //    cross < 0  → vento arriva da destra
+    const cross = boardDirectionVector.x * windVector.y - boardDirectionVector.y * windVector.x;
+    const sign = (cross > 0) ? 1 : -1;
 
-            // Calcolo angolo vela dinamico:
-            // - absAngle = 0   → non qui (bolina stretta già gestita)
-            // - absAngle = π/2 → sailMag = 3π/4 (135°)
-            // - absAngle = π   → sailMag = π/2 ( 90°)
-            let sailMag = PI - 0.5 * absAngle;
+    // 4) No-Go zone in lettura di angoli stretti (< noGo) o stretti da poppa (> π - noGo)
+    const noGoRadians = radians(NO_GO_ZONE_DEGREES);
+    let powerFactor = 0;
 
-            // Segno in base al lato da cui arriva il vento
-            let sign = (angleBetween >= 0) ? 1 : -1;
-            board.targetSailAngle = sign * sailMag;
-        }
+    // 4a) Bolina stretta: absAngle < noGoRadians → nessuna propulsione, vela a 180° (π)
+    if (absAngle < noGoRadians) {
+        powerFactor = 0;
+        board.targetSailAngle = PI; 
 
-        board.debug_powerFactor = powerFactor;
+    // 4b) Poppa stretta: absAngle > π - noGoRadians → poca propulsione, vela a ±90° (π/2)
+    } else if (absAngle > PI - noGoRadians) {
+        powerFactor = 0.2;
+        board.targetSailAngle = sign * (PI / 2);
 
-        // 4) Interpoliamo la vela per ottenere un movimento fluido
-        board.sailAngle += (board.targetSailAngle - board.sailAngle) * board.sailLerp;
+    // 4c) Bolina larga, traverso, lasco: potenza variabile, vela variabile
+    } else {
+        // 5) Propulsione proporzionale a sin(absAngle) (picco a traverso)
+        powerFactor = sin(absAngle);
 
-        // 5) Applichiamo la forza propulsiva lungo la prua
-        const force = boardDirectionVector.copy().mult(powerFactor * WIND_SPEED);
-        board.vel.add(force);
-        board.vel.mult(board.drag);
-        board.pos.add(board.vel);
-
-        // 6) Wrapping attorno allo schermo
-        if (board.pos.x > width + 20)  board.pos.x = -20;
-        if (board.pos.x < -20)         board.pos.x = width + 20;
-        if (board.pos.y > height + 20) board.pos.y = -20;
-        if (board.pos.y < -20)         board.pos.y = height + 20;
+        // 6) Calcolo dinamico dell’angolo della vela (sailMag):
+        //    sailMag = π − 0.5 * absAngle
+        //      • absAngle = 0   → sailMag = π   (180°)
+        //      • absAngle = π/2 → sailMag = 3π/4 (135°)
+        //      • absAngle = π   → sailMag = π/2 ( 90°)
+        let sailMag = PI - 0.5 * absAngle;
+        board.targetSailAngle = sign * sailMag;
     }
+
+    // 7) Interpoliamo per ottenere un movimento fluido della vela
+    board.sailAngle += (board.targetSailAngle - board.sailAngle) * board.sailLerp;
+    board.debug_angleBetween = angleBetween;
+    board.debug_powerFactor = powerFactor;
+
+    // 8) Applichiamo la forza propulsiva lungo la direzione della prua
+    const force = boardDirectionVector.copy().mult(powerFactor * WIND_SPEED);
+    board.vel.add(force);
+
+    // 9) Frizione e aggiornamento posizione
+    board.vel.mult(board.drag);
+    board.pos.add(board.vel);
+
+    // 10) Wrapping attorno ai bordi dello schermo
+    if (board.pos.x > width + 20)  board.pos.x = -20;
+    if (board.pos.x < -20)         board.pos.x = width + 20;
+    if (board.pos.y > height + 20) board.pos.y = -20;
+    if (board.pos.y < -20)         board.pos.y = height + 20;
+}
+
 
     // --- DISEGNO DEL WINDSURF ---
     function drawWindsurf() {
