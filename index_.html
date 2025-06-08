@@ -17,36 +17,50 @@
     <p>Usa ◀ FRECCIA SINISTRA e FRECCIA DESTRA ▶ per virare.</p>
 <script>
     // --- COSTANTI DI GIOCO ---
-    const WIND_DIRECTION_DEGREES = 0;     // 0 = Nord (vento “verso” il basso sullo schermo)
-    const WIND_SPEED = 0.01;              // Forza del vento
-    const NO_GO_ZONE_DEGREES = 15;        // Ampiezza per lato in bolina stretta
+    // Le vecchie costanti sono state sostituite o riadattate
+    const INITIAL_WIND_DIRECTION_DEGREES = 45; // Direzione del vento all'inizio
+    const MIN_WIND_SPEED = 0.04;               // Forza minima del vento
+    const MAX_WIND_SPEED = 0.12;               // Forza massima del vento
+    const WIND_CHANGE_RATE = 0.00001;           // Velocità con cui il vento cambia (più piccolo = più lento)
+    const NO_GO_ZONE_DEGREES = 15;
 
     // --- VARIABILI GLOBALI ---
     let board;
     let windVector;
-    
-    function setup() {
-        createCanvas(800, 600);
-        angleMode(RADIANS);
 
-        board = {
-            pos: createVector(width / 2, height / 2),
-            vel: createVector(0, 0),
-            angle: 0,              // direzione prua della tavola
-            turnSpeed: 0.05,
-            drag: 0.98,
-            sailAngle: 0,          // stato attuale della vela (in radianti)
-            targetSailAngle: 0,    // angolo di vela desiderato (in radianti)
-            sailLerp: 0.1,         // velocità di interpolazione (più piccolo = più fluido)
-            debug_angleBetween: 0,
-            debug_powerFactor: 0,
-        };
-        
-        // Creiamo windVector in modo che punti VERSO la tavola dalla direzione da cui proviene il vento:
-        // Se WIND_DIRECTION_DEGREES = 0 (Nord), allora il vento soffia verso il basso.
-        const windAngleRadians = radians(WIND_DIRECTION_DEGREES) - PI / 2;
-        windVector = p5.Vector.fromAngle(windAngleRadians, 1);
-    }
+    // Variabili per il vento dinamico
+    let currentWindDirectionDegrees;
+    let currentWindSpeed;
+    let windDirectionNoiseOffset;
+    let windStrengthNoiseOffset;
+
+function setup() {
+    createCanvas(800, 600);
+    angleMode(RADIANS);
+
+    board = {
+        pos: createVector(width / 2, height / 2),
+        vel: createVector(0, 0),
+        angle: 0,
+        turnSpeed: 0.05, // Velocità di virata della tavola 0.09
+        drag: 0.96, // Attrito della tavola
+        lateralGrip: 0.08, 
+        sailAngle: 0, // 
+        targetSailAngle: 0,
+        sailLerp: 0.1, // Velocità di interpolazione della vela 
+        debug_angleBetween: 0, 
+        debug_powerFactor: 0,
+    };
+    
+    // Inizializza le variabili del vento dinamico
+    currentWindDirectionDegrees = INITIAL_WIND_DIRECTION_DEGREES;
+    currentWindSpeed = (MIN_WIND_SPEED + MAX_WIND_SPEED) / 2;
+    windDirectionNoiseOffset = 0;
+    windStrengthNoiseOffset = 10000; // Un valore diverso per avere fluttuazioni non correlate
+    
+    // windVector verrà ora calcolato ad ogni frame in updatePhysics()
+    windVector = createVector(0, 1); // Inizializzazione temporanea
+}
 
     function draw() {
         background(60, 120, 220);
@@ -66,147 +80,214 @@
         }
     }
 
-    function updatePhysics() {
-        // 1) Vettore di direzione della prua (board.angle punta verso la prua)
-        const boardDir = p5.Vector.fromAngle(board.angle - PI / 2);
+    // SOSTITUISCI COMPLETAMENTE QUESTA FUNZIONE
+function updatePhysics() {
+    // --- NUOVA LOGICA: VENTO DINAMICO ---
+    // 1) Facciamo avanzare gli offset per la funzione noise()
+    windDirectionNoiseOffset += WIND_CHANGE_RATE;
+    windStrengthNoiseOffset += WIND_CHANGE_RATE;
 
-        // 2) Angolo tra prua e vento (windVector → boardDir), in [-π, +π]
-        const angleBetween = windVector.angleBetween(boardDir);
-        const absAngle = abs(angleBetween);
+    // 2) Calcoliamo la nuova direzione e forza del vento usando Perlin Noise
+    //    noise() restituisce un valore fluido tra 0 e 1.
+    //    Usiamo map() per portarlo nel nostro range desiderato.
+    let directionNoise = noise(windDirectionNoiseOffset);
+    currentWindDirectionDegrees = map(directionNoise, 0, 1, -90, 90) + INITIAL_WIND_DIRECTION_DEGREES; // Fluttua di ±90° attorno alla direzione iniziale
 
-        // 3) Segno in base al lato da cui arriva il vento:
-        //    cross > 0 → vento arriva da sinistra, vela va a destra (+)
-        //    cross < 0 → vento arriva da destra, vela va a sinistra (−)
-        const cross = windVector.x * boardDir.y - windVector.y * boardDir.x;
-        const sideSign = (cross > 0) ? 1 : -1;
+    let strengthNoise = noise(windStrengthNoiseOffset);
+    currentWindSpeed = map(strengthNoise, 0, 1, MIN_WIND_SPEED, MAX_WIND_SPEED);
+    
+    // NUOVA RIGA (CORRETTA):
+    // La conversione corretta da "direzione da cui viene" (bussola)
+    // a "direzione verso cui va" (vettore p5.js) è +90 gradi.
+    const windAngleRadians = radians(currentWindDirectionDegrees + 90);
 
-        const noGo = radians(NO_GO_ZONE_DEGREES);
-        let powerFactor = 0;
-        let target = 0;
+    windVector = p5.Vector.fromAngle(windAngleRadians, 1);
 
-        // 4a) Bolina stretta (absAngle < noGo): nessuna propulsione, vela a 180° (piatta di fronte)
-        if (absAngle < noGo) {
-            powerFactor = 0;
-            target = PI;
+    // La logica seguente rimane quasi identica, ma usa `currentWindSpeed`
+    
+    const boardDir = p5.Vector.fromAngle(board.angle - PI / 2);
+    const angleBetween = windVector.angleBetween(boardDir);
+    const absAngle = abs(angleBetween);
 
-        // 4b) Poppa stretta (absAngle > π - noGo): poca propulsione, vela a ±90°
-        } else if (absAngle > PI - noGo) {
-            powerFactor = 0.2;
-            target = sideSign * (PI / 2);
+    const cross = windVector.x * boardDir.y - windVector.y * boardDir.x;
+    const sideSign = (cross > 0) ? 1 : -1;
 
-        // 4c) Bolina larga, traverso, lasco: potenza variabile, vela variabile
-        } else {
-            powerFactor = sin(absAngle);
-            // sailMag = π − 0.5 * absAngle
-            let sailMag = PI - 0.5 * absAngle;
-            target = sideSign * sailMag;
-        }
+    const noGo = radians(NO_GO_ZONE_DEGREES);
+    let powerFactor = 0;
+    let target = 0;
 
-        // 5) Interpolazione fluida della vela
-        board.sailAngle += (target - board.sailAngle) * board.sailLerp;
-        board.debug_angleBetween = angleBetween;
-        board.debug_powerFactor = powerFactor;
-
-        // 6) Forza propulsiva lungo la prua
-        const force = boardDir.copy().mult(powerFactor * WIND_SPEED);
-        board.vel.add(force);
-        board.vel.mult(board.drag);
-        board.pos.add(board.vel);
-
-        // 7) Wrapping ai bordi
-        if (board.pos.x > width + 20)  board.pos.x = -20;
-        if (board.pos.x < -20)         board.pos.x = width + 20;
-        if (board.pos.y > height + 20) board.pos.y = -20;
-        if (board.pos.y < -20)         board.pos.y = height + 20;
+    if (absAngle < noGo) {
+        powerFactor = 0;
+        target = sideSign * PI;
+    } else if (absAngle > PI - noGo) {
+        powerFactor = 0.2;
+        target = sideSign * (PI / 2);
+    } else {
+        powerFactor = sin(absAngle);
+        let sailMag = PI - 0.5 * absAngle;
+        target = sideSign * sailMag;
     }
 
-    // --- DISEGNO DEL WINDSURF ---
-    function drawWindsurf() {
-        push();
-        translate(board.pos.x, board.pos.y);
-        rotate(board.angle);
+    board.sailAngle += (target - board.sailAngle) * board.sailLerp;
+    board.debug_angleBetween = angleBetween;
+    board.debug_powerFactor = powerFactor;
 
-        // Tavola
-        fill(240, 230, 140);
-        noStroke();
-        rectMode(CENTER);
-        rect(0, 0, 15, 60);
+    // Applichiamo la forza usando la NUOVA velocità del vento variabile
+    const force = boardDir.copy().mult(powerFactor * currentWindSpeed);
+    board.vel.add(force);
+    board.vel.mult(board.drag);
 
-        // Punta
-        fill(210, 180, 140);
-        triangle(0, -40, -7.5, -30, 7.5, -30);
-        
-        // Vela (ruota intorno al punto di attacco)
-        push();
-        translate(0, -20);
-        rotate(board.sailAngle);
-        // Albero
-        fill(100, 50, 0);
-        rect(0, 10, 4, 30);
-        // Vela
-        fill(255, 255, 255, 200);
-        stroke(50);
-        strokeWeight(2);
-        rect(0, -20, 4, 40);
-        pop();
-
-        pop();
+    const speed = board.vel.mag();
+    if (speed > 0.01) {
+        const targetVel = boardDir.copy().setMag(speed);
+        board.vel.lerp(targetVel, board.lateralGrip);
     }
+    
+    board.pos.add(board.vel);
+    
+    if (board.pos.x > width + 20)  board.pos.x = -20;
+    if (board.pos.x < -20)         board.pos.x = width + 20;
+    if (board.pos.y > height + 20) board.pos.y = -20;
+    if (board.pos.y < -20)         board.pos.y = height + 20;
+}
 
-    // --- INDICATORE DEL VENTO (BUSSOLA CORRETTA) ---
-    function drawWindIndicator() {
-        push();
-        translate(50, 50);
-        noFill();
-        stroke(255, 255, 255, 150);
-        strokeWeight(2);
-        ellipse(0, 0, 40, 40);
 
-        fill(255);
-        noStroke();
-        textAlign(CENTER, CENTER);
-        text('N', 0, -28);
+function drawWindsurf() {
+    push();
+    translate(board.pos.x, board.pos.y);
+    rotate(board.angle);
 
-        // RUOTIAMO DI -WIND_DIRECTION_DEGREES per avere la bussola non invertita
-        rotate(-radians(WIND_DIRECTION_DEGREES));
-        stroke(255, 0, 0);
-        strokeWeight(3);
-        line(0, -10, 0, 15);
-        fill(255, 0, 0);
-        noStroke();
-        triangle(0, 20, -5, 10, 5, 10);
-        pop();
-    }
+    // --- Tavola (Design migliorato) ---
+    // Ho reso la forma più arrotondata e moderna usando le curve di Bezier.
+    // Ho scelto anche colori più vivaci.
 
-    // --- DEBUG INFO SULLO SCHERMO ---
-    function drawDebugInfo() {
-        const windVecAngle = degrees(windVector.heading());
-        const boardAngle = degrees(board.angle % TWO_PI);
-        const relativeAngle = degrees(board.debug_angleBetween);
-        const sailAngle = degrees(board.sailAngle);
-        const power = board.debug_powerFactor;
-        const speed = board.vel.mag();
+    // Colore di base più vivace
+    fill(40, 200, 220); 
+    // Bordo scuro per definire meglio la forma
+    stroke(30, 30, 30);
+    strokeWeight(2);
 
-        push();
-        fill(255, 255, 0);
-        noStroke();
-        textSize(14);
-        textAlign(RIGHT, TOP);
-        textFont('monospace');
-        let x = width - 10;
-        let y = 10;
-        const lineHeight = 18;
+    // Corpo della tavola con curve morbide
+    beginShape();
+    vertex(0, 35); // Coda (punto di partenza centrale)
+    // Curva per il lato sinistro (punto di controllo 1, punto di controllo 2, punto di arrivo)
+    bezierVertex(-15, 30, -15, -20, 0, -40); 
+    // Curva per il lato destro che torna alla coda
+    bezierVertex(15, -20, 15, 30, 0, 35);
+    endShape(CLOSE);
 
-        text(`--- DEBUG INFO ---`, x, y); y += lineHeight * 1.5;
-        text(`Vento da (const): ${WIND_DIRECTION_DEGREES.toFixed(1)}°`, x, y); y += lineHeight;
-        text(`Vettor Vento Dir: ${windVecAngle.toFixed(1)}°`, x, y); y += lineHeight;
-        text(`Angolo Tavola: ${boardAngle.toFixed(1)}°`, x, y); y += lineHeight;
-        text(`Ang Tavola≡Vento: ${relativeAngle.toFixed(1)}°`, x, y); y += lineHeight * 1.5;
-        text(`Angolo Vela: ${sailAngle.toFixed(1)}°`, x, y); y += lineHeight;
-        text(`Fattor Potenza: ${power.toFixed(2)}`, x, y); y += lineHeight;
-        text(`Velocità: ${speed.toFixed(3)}`, x, y);
-        pop();
-    }
+    // --- Decorazioni sulla tavola ---
+    noStroke();
+    // Strisce bianche decorative
+    fill(255);
+    quad(-8, 10, 8, 10, 10, 22, -10, 22);
+    quad(-6, -5, 6, -5, 7, 5, -7, 5);
+    
+    // Area antiscivolo (footpad) dove si mettono i piedi
+    fill(80, 80, 90, 200);
+    ellipse(0, -10, 15, 25);
+
+
+    // --- Pinna (leggermente più stilizzata) ---
+    fill(50, 50, 60); // Un grigio scuro che si abbina
+    stroke(30);
+    strokeWeight(1);
+    beginShape();
+    vertex(-2, 34);
+    vertex(-4, 42);
+    vertex(4, 42);
+    vertex(2, 34);
+    endShape(CLOSE);
+    
+
+    // --- Albero e Vela (NON TOCCATO, COME RICHIESTO) ---
+    push();
+    translate(0, -20); // punto base d'attacco
+    rotate(board.sailAngle);
+
+    // Albero (inclinato, sottile)
+    stroke(90);
+    strokeWeight(3);
+    line(0, 0, 0, -60);
+
+    // Vela triangolare
+    noStroke();
+    fill(255, 255, 255, 180);
+    beginShape();
+    vertex(0, 0);           // base attacco
+    vertex(20, -25);        // punto sulla fine del boma
+    vertex(0, -60);         // cima albero
+    endShape(CLOSE);
+
+    // Stecche orizzontali (solo decorazione)
+    stroke(180);
+    strokeWeight(1);
+    line(2, -15, 14, -20);
+    line(2, -30, 11, -35);
+    line(2, -45, 8, -50);
+
+    pop(); // fine vela
+
+    pop(); // fine tavola
+}
+
+// SOSTITUISCI QUESTA FUNZIONE
+function drawWindIndicator() {
+    push();
+    translate(50, 50);
+    noFill();
+    stroke(255, 255, 255, 150);
+    strokeWeight(2);
+    ellipse(0, 0, 40, 40);
+
+    fill(255);
+    noStroke();
+    textAlign(CENTER, CENTER);
+    text('N', 0, -28); // La 'N' è sempre in alto
+
+    // Ora ruotiamo il sistema di coordinate dell'angolo del vento
+    rotate(radians(currentWindDirectionDegrees));
+    
+    // Disegniamo la freccia che punta verso l'alto (verso Nord)
+    // Questa freccia ora punterà correttamente nella direzione da cui proviene il vento
+    stroke(255, 0, 0);
+    strokeWeight(3);
+    line(0, 10, 0, -15); // Corpo della freccia
+    fill(255, 0, 0);
+    noStroke();
+    triangle(0, -20, -5, -10, 5, -10); // Punta della freccia
+    pop();
+}
+
+// --- DEBUG INFO SULLO SCHERMO (CON I NUOVI DATI) ---
+function drawDebugInfo() {
+    const windVecAngle = degrees(windVector.heading());
+    const boardAngle = degrees(board.angle % TWO_PI);
+    const relativeAngle = degrees(board.debug_angleBetween);
+    const sailAngle = degrees(board.sailAngle);
+    const power = board.debug_powerFactor;
+    const speed = board.vel.mag();
+
+    push();
+    fill(255, 255, 0);
+    noStroke();
+    textSize(14);
+    textAlign(RIGHT, TOP);
+    textFont('monospace');
+    let x = width - 10;
+    let y = 10;
+    const lineHeight = 18;
+
+    text(`--- DEBUG INFO ---`, x, y); y += lineHeight * 1.5;
+    text(`Vento da (dinam): ${currentWindDirectionDegrees.toFixed(1)}°`, x, y); y += lineHeight;
+    text(`Forza Vento: ${currentWindSpeed.toFixed(3)}`, x, y); y += lineHeight; // NUOVA RIGA
+    text(`Angolo Tavola: ${boardAngle.toFixed(1)}°`, x, y); y += lineHeight;
+    text(`Ang Tavola≡Vento: ${relativeAngle.toFixed(1)}°`, x, y); y += lineHeight * 1.5;
+    text(`Angolo Vela: ${sailAngle.toFixed(1)}°`, x, y); y += lineHeight;
+    text(`Fattor Potenza: ${power.toFixed(2)}`, x, y); y += lineHeight;
+    text(`Velocità: ${speed.toFixed(3)}`, x, y);
+    pop();
+}
 </script>
 </body>
 </html>
