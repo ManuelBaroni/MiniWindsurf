@@ -74,12 +74,12 @@ function updatePhysics() {
     let powerFactor = 0;
 
     // 1) Bolina stretta (assoluto < noGo) → nessuna propulsione, vela a 0
-    if (absAngle < noGoRadians) {
+    if (absAngle > PI - noGoRadians) {
         powerFactor = 0;
         board.sailAngle = 0;
 
     // 2) Poppa stretta (assoluto > π - noGo) → poca propulsione, vela a ±90°
-    } else if (absAngle > PI - noGoRadians) {
+    } else if (absAngle < noGoRadians) {
         // Una forza minima per poter avanzare in poppa stretta
         powerFactor = 0.2; 
         // Vela a 90° (π/2) rispetto alla tavola
