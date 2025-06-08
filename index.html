@@ -121,37 +121,106 @@
     }
 
     // --- DISEGNO DEL WINDSURF ---
-    function drawWindsurf() {
-        push();
-        translate(board.pos.x, board.pos.y);
-        rotate(board.angle);
+   function drawWindsurf() {
+    push();
+    translate(board.pos.x, board.pos.y);
+    rotate(board.angle);
 
-        // Tavola
-        fill(240, 230, 140);
-        noStroke();
-        rectMode(CENTER);
-        rect(0, 0, 15, 60);
+    // --- TAVOLA DETTAGLIATA ---
+    noStroke();
+    fill(240, 230, 140);
+    beginShape();
+    // Disegnamo contorni smussati della tavola
+    vertex(-10, 30);
+    vertex(10, 30);
+    vertex(14, 20);
+    vertex(14, -20);
+    vertex(10, -30);
+    vertex(-10, -30);
+    vertex(-14, -20);
+    vertex(-14, 20);
+    endShape(CLOSE);
 
-        // Punta
-        fill(210, 180, 140);
-        triangle(0, -40, -7.5, -30, 7.5, -30);
-        
-        // Vela (ruota intorno al punto di attacco)
-        push();
-        translate(0, -20);
-        rotate(board.sailAngle);
-        // Albero
-        fill(100, 50, 0);
-        rect(0, 10, 4, 30);
-        // Vela
-        fill(255, 255, 255, 200);
-        stroke(50);
-        strokeWeight(2);
-        rect(0, -20, 4, 40);
-        pop();
+    // Foot straps (dettaglio imbottiture)
+    stroke(80);
+    strokeWeight(2);
+    noFill();
+    arc(0, 0, 40, 20, PI + 0.5, PI + 2.6);   // strap posteriore
+    arc(0, 10, 40, 20, PI + 0.5, PI + 2.6);  // strap anteriore
 
-        pop();
+    // Aleta (fin) sotto la tavola
+    noStroke();
+    fill(100, 50, 0);
+    beginShape();
+    vertex(-4, 30);
+    vertex(4, 30);
+    vertex(5, 42);
+    vertex(0, 55);
+    vertex(-5, 42);
+    endShape(CLOSE);
+
+    // --- MAST E BOOM CON DETTAGLI ---
+    push();
+    translate(0, -15);          // punto di attacco dell'albero (circa 15px sopra il centro)
+    // Albero (mast) con dettaglio nodi
+    stroke(80);
+    strokeWeight(5);
+    line(0, 0, 0, -100);
+    // Dettagli nodi (anelli)
+    strokeWeight(1);
+    for (let y = -20; y > -100; y -= 20) {
+        noFill();
+        stroke(60);
+        ellipse(0, y, 8, 8);
     }
+    // Boom (orizzontale) con grip e impugnature
+    stroke(80);
+    strokeWeight(4);
+    line(0, -60, 60, -60);
+    line(0, -60, -60, -60);
+    // Grip del boom (impugnature)
+    stroke(120);
+    strokeWeight(8);
+    // lato destro
+    line(40, -60, 20, -60);
+    // lato sinistro
+    line(-40, -60, -20, -60);
+    pop();
+
+    // --- VELA CON DETTAGLI DYNAMICHI BASED ON board.sailAngle ---
+    push();
+    translate(0, -15);
+    rotate(board.sailAngle);
+
+    // Profilo della vela (forma più naturale, con curva inferiore)
+    noStroke();
+    fill(255, 255, 255, 200);
+    beginShape();
+    vertex(0, 0);            // piede dell'albero
+    vertex(60, -60);         // punto sul boma verso prua
+    vertex(50, -100);        // parte superiore curva
+    vertex(20, -120);        // punta vela
+    vertex(0, -100);         // retro vela
+    endShape(CLOSE);
+
+    // Dettagli battens (stecche) - linee diagonali
+    stroke(200);
+    strokeWeight(2);
+    line(0, -20, 48, -44);
+    line(0, -40, 40, -80);
+    line(0, -60, 28, -104);
+
+    // Profilo cuciture (piccole linee orizzontali)
+    stroke(180);
+    strokeWeight(1);
+    for (let y = -10; y > -100; y -= 15) {
+        line(0, y, map(y, -10, -100, 30, 45), y - 2);
+    }
+
+    pop();
+    pop();
+}
+
 
     // --- INDICATORE DEL VENTO (BUSSOLA CORRETTA) ---
     function drawWindIndicator() {
