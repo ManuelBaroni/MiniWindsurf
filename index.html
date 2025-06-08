@@ -73,12 +73,20 @@ function updatePhysics() {
     const noGoRadians = radians(NO_GO_ZONE_DEGREES);
     let powerFactor = 0;
 
-    // Se siamo nella “no‐go zone” (bolina stretta o poppa stretta),
-    // non c’è propulsione e la vela “fileggia” (angolo = 0).
-    if (absAngle < noGoRadians || absAngle > PI - noGoRadians) {
+    // 1) Bolina stretta (assoluto < noGo) → nessuna propulsione, vela a 0
+    if (absAngle < noGoRadians) {
         powerFactor = 0;
         board.sailAngle = 0;
 
+    // 2) Poppa stretta (assoluto > π - noGo) → poca propulsione, vela a ±90°
+    } else if (absAngle > PI - noGoRadians) {
+        // Una forza minima per poter avanzare in poppa stretta
+        powerFactor = 0.2; 
+        // Vela a 90° (π/2) rispetto alla tavola
+        let sign = (angleBetween >= 0) ? 1 : -1;
+        board.sailAngle = sign * (PI / 2);
+
+    // 3) Altre andature (bolina larga, traverso, lasco)
     } else {
         // Fuori dalla no‐go zone: propulsione massima a traverso
         powerFactor = sin(absAngle);
